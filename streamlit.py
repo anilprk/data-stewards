@@ -8,8 +8,9 @@ from snowflake.core import Root
 from snowflake.snowpark import Session
 from snowflake.snowpark.functions import col
 from urllib.parse import urlparse
-import perplexity
-
+from typing import List, Optional
+from pydantic import BaseModel
+from perplexity import Perplexity
 
 
 # --- SNOWFLAKE CONNECTION FOR STREAMLIT COMMUNITY CLOUD ---
