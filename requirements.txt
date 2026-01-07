@@ -4,3 +4,5 @@ snowflake-snowpark-python>=1.11.0
 snowflake>=0.8.0
 pandas>=2.0.0
 requests>=2.28.0
+perpelexity
+pydantic
