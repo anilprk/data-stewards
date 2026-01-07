@@ -301,6 +301,7 @@ def render_enrichment_page(session, selected_hcp_df):
 
             df_response = json.loads(get_details_for_hcp(selected_record.get('NAME', '')))
             standardize_value_lengths(df_response)
+            print(df_response)
             df_response = pd.DataFrame(df_response)
             # df_response = df.head(1)
                                               
