@@ -299,7 +299,7 @@ def render_enrichment_page(session, selected_hcp_df):
             full_cmd = f"SELECT snowflake.cortex.complete('{MODEL_NAME}', $${final_prompt_with_context}$$) as response"
             #st.write(full_cmd)
 
-            df_response = get_details_for_hcp(selected_record.get('NAME', ''))
+            df_response = json.loads(get_details_for_hcp(selected_record.get('NAME', '')))
             standardize_value_lengths(df_response)
             df_response = pd.DataFrame(df_response)
             df_response = df.head(1)
