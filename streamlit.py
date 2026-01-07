@@ -501,8 +501,12 @@ def render_enrichment_page(session, selected_hcp_df):
     with st.spinner("🚀 Contacting AI Assistant for Data Enrichment..."):
         proposed_df = get_enriched_data_from_llm(session, selected_hcp_df)
 
-    if current_df.empty or proposed_df.empty:
-        st.warning("Could not generate a comparison report.")
+    try:
+        if current_df.empty or proposed_df.empty:
+            st.warning("Could not generate a comparison report.")
+            st.stop()
+    except AttributeError:
+        st.error("One of the dataframes is invalid. Please check the data source.")
         st.stop()
 
     selected_id = int(current_df['ID'].iloc[0])
