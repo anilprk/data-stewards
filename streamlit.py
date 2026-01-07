@@ -9,7 +9,7 @@ from snowflake.snowpark import Session
 from snowflake.snowpark.functions import col
 from urllib.parse import urlparse
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from perplexity import Perplexity
 
 
