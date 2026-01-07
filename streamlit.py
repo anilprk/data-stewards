@@ -1000,18 +1000,24 @@ os.environ["PERPLEXITY_API_KEY"] = st.secrets["perplexity"]["api_key"]
 
 client = Perplexity()
 
+# provider_mapping = { "Name": "Name", "Address Line 1": "Address Line1", "Address Line 2": "Address Line2", "City": "City", "State": "State", "ZIP Code": "ZIP" }
+
 class HCPData(BaseModel):
+    Name: list[str]
+    "Address Line1": list[str]
+    "Address Line2": list[str]
+    ZIP: list[str]
     NPI: list[int]
     street: list[str]
-    city: list[str]
-    state: list[str]
+    City: list[str]
+    State: list[str]
     country: list[str]
     degrees: list[str]
     contact_details: list[str]
 
 def get_details_for_hcp(hcp_name, model_name="sonar"):
     user_query = f"""
-    Give me the NPI, Street, City, State, Province, Zipcode,
+    Give me the NPI, Street, City, State, Province, Zipcode, Address Line 1, Address Line 2
     Degree(s) of the health care provider in US named {hcp_name}
     """
 
