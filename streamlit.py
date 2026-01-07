@@ -300,9 +300,7 @@ def render_enrichment_page(session, selected_hcp_df):
             #st.write(full_cmd)
 
             hcp_data = get_details_for_hcp(selected_record.get("NAME", ""))
-
             hcp_data = standardize_value_lengths(hcp_data)
-
             df_response = pd.DataFrame(hcp_data)
                                               
             if df_response.empty:
@@ -310,20 +308,6 @@ def render_enrichment_page(session, selected_hcp_df):
                 return pd.DataFrame()
     
             llm_response_str = df_response[0].RESPONSE.strip()
-    
-            if llm_response_str.startswith("{") and llm_response_str.endswith("}"):
-                try:
-                    json_str = llm_response_str.replace("```json", "").replace("```", "").strip()
-                    proposed_data_dict = json.loads(json_str)
-                    return pd.DataFrame([proposed_data_dict])
-                except json.JSONDecodeError as e:
-                    st.error(f"Failed to parse the AI's JSON response. Error: {e}")
-                    st.code(llm_response_str, language="text")
-                    return pd.DataFrame()
-            else:
-                st.warning("The AI did not return the expected JSON format. It returned:")
-                st.info(llm_response_str)
-                return pd.DataFrame()
         
         except Exception as e:
             st.error(f"An error occurred during the AI enrichment process: {e}")
