@@ -8,7 +8,7 @@ from snowflake.core import Root
 from snowflake.snowpark import Session
 from snowflake.snowpark.functions import col
 from urllib.parse import urlparse
-# import perplexity
+import perplexity
 
 
 
@@ -297,9 +297,12 @@ def render_enrichment_page(session, selected_hcp_df):
             """
             full_cmd = f"SELECT snowflake.cortex.complete('{MODEL_NAME}', $${final_prompt_with_context}$$) as response"
             #st.write(full_cmd)
-            df_response = _session.sql(full_cmd).collect()
-            
-    
+
+            df_response = get_details_for_hcp(selected_record.get('NAME', ''))
+            standardize_value_lengths(df_response)
+            df_response = pd.DataFrame(df_response)
+            df_response = df.head(1)
+                                              
             if not df_response:
                 st.warning("The AI assistant returned an empty response.")
                 return pd.DataFrame()
@@ -1004,6 +1007,49 @@ if "show_primary_confirm_dialog" not in st.session_state:
 
 session = get_snowflake_session()
 os.environ["PERPLEXITY_API_KEY"] = st.secrets["perplexity"]["api_key"]
+
+client = Perplexity()
+
+class HCPData(BaseModel):
+    NPI: list[int]
+    street: list[str]
+    city: list[str]
+    state: list[str]
+    country: list[str]
+    degrees: list[str]
+    contact_details: list[str]
+
+def get_details_for_hcp(hcp_name, model_name='sonar', should_use_pro_search=False):
+    user_query = f"Give me the NPI, Street, City, State, Province, Zipcode, Degree(s) of the health care provider in us named {hcp_name}"
+    completion = client.chat.completions.create(
+        model=model_name,
+        messages=[
+            {
+                "role": "user",
+                "content": user_query
+            }
+        ],
+        response_format= {
+            "type": "json_schema",
+            "json_schema": {
+                "schema": HCPData.model_json_schema()
+            }
+        }
+    )
+    print(f"Total Cost for the request is: {completion.usage.cost.total_cost}")
+    data = HCPData.model_validate_json(completion.choices[0].message.content)
+    data = completion.choices[0].message.content
+    return data
+
+def standardize_value_lengths(dictionary):
+    max_length = max([len(i) for i in dictionary.values()])
+
+    for key, value in dictionary.items():
+        if len(value) < max_length:
+            len_diff = max_length - len(value)
+            for i in range(len_diff):
+                dictionary[key].append(value[0])
+                
 # Corrected popup display logic
 if st.session_state.current_view == "main":
     render_main_page(session)
