@@ -1,5 +1,6 @@
 import json
 import time
+import os
 import requests
 import pandas as pd
 import streamlit as st
@@ -1000,6 +1001,7 @@ if "show_primary_confirm_dialog" not in st.session_state:
     st.session_state.show_primary_confirm_dialog = False
 
 session = get_snowflake_session()
+os.environ["PERPLEXITY_API_KEY"] = st.secrets["perplexity"]["api_key"]
 # Corrected popup display logic
 if st.session_state.current_view == "main":
     render_main_page(session)
