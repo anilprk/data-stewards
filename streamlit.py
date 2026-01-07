@@ -301,6 +301,7 @@ def render_enrichment_page(session, selected_hcp_df):
 
             hcp_data = get_details_for_hcp(selected_record.get("NAME", ""))
             hcp_data = standardize_value_lengths(hcp_data)
+            print(hcp_data)
             df_response = pd.DataFrame(hcp_data)
                                               
             if df_response.empty:
