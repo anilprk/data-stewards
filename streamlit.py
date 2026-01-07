@@ -1007,13 +1007,8 @@ class HCPData(BaseModel):
     address_line_1: List[str] = Field(..., alias="Address Line1")
     address_line_2: List[str] = Field(..., alias="Address Line2")
     ZIP: list[str]
-    NPI: list[int]
-    street: list[str]
     City: list[str]
     State: list[str]
-    country: list[str]
-    degrees: list[str]
-    contact_details: list[str]
 
 def get_details_for_hcp(hcp_name, model_name="sonar"):
     user_query = f"""
