@@ -306,8 +306,6 @@ def render_enrichment_page(session, selected_hcp_df):
             if df_response.empty:
                 st.warning("The AI assistant returned an empty response.")
                 return pd.DataFrame()
-    
-            llm_response_str = df_response[0].RESPONSE.strip()
         
         except Exception as e:
             st.error(f"An error occurred during the AI enrichment process: {e}")
