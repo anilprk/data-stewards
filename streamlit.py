@@ -500,7 +500,16 @@ def render_enrichment_page(session, selected_hcp_df):
 
     with st.spinner("🚀 Contacting AI Assistant for Data Enrichment..."):
         proposed_df = get_enriched_data_from_llm(session, selected_hcp_df)
-
+    # Debug: Show the DataFrames before checking emptiness
+    st.write("### Current DataFrame (current_df)")
+    st.write(current_df)
+    
+    st.write("### Proposed DataFrame (proposed_df)")
+    st.write(proposed_df)
+    
+    # Optional: also print to console for logging
+    print("Current DataFrame:\n", current_df)
+    print("Proposed DataFrame:\n", proposed_df)
     try:
         if current_df.empty or proposed_df.empty:
             st.warning("Could not generate a comparison report.")
