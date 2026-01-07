@@ -305,7 +305,7 @@ def render_enrichment_page(session, selected_hcp_df):
 
             df_response = pd.DataFrame(hcp_data)
                                               
-            if not df_response:
+            if df_response.empty:
                 st.warning("The AI assistant returned an empty response.")
                 return pd.DataFrame()
     
