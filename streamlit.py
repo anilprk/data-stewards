@@ -1004,8 +1004,8 @@ client = Perplexity()
 
 class HCPData(BaseModel):
     Name: list[str]
-    "Address Line1": list[str]
-    "Address Line2": list[str]
+    address_line_1: List[str] = Field(..., alias="Address Line1")
+    address_line_2: List[str] = Field(..., alias="Address Line2")
     ZIP: list[str]
     NPI: list[int]
     street: list[str]
