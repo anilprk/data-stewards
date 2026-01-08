@@ -200,7 +200,7 @@ def render_rag_chatbot(session):
 
 
 # --- ENRICHMENT & COMPARISON PAGE FUNCTION ---
-def render_enrichment_page(session, selected_hcp_df, bypass=False):
+def render_enrichment_page(session, selected_hcp_df):
     # --- BACK BUTTON LOGIC ---
     _, btn_col = st.columns([4, 1])
     with btn_col:
@@ -865,6 +865,7 @@ def render_main_page(session):
                 if "couldn't find any records matching your search" not in assistant_messages[-1]["content"]:
                     st.button(label="Still wan't to proceed with the API Search?", type="primary", on_click= lambda: get_enriched_data_from_llm(hcp_name=current_prompt,bypass=True))
                     st.session_state.current_view = "enrichment_page"
+                    st.session_state.bypass = True
                     st.rerun()
 
             # Helper to safely get and format value
@@ -1068,6 +1069,8 @@ elif st.session_state.current_view == "enrichment_page":
         # when a pop-up is active.
         if not st.session_state.show_popup:
             render_enrichment_page(session, selected_record_df)
+    elif st.session.bypass == True:
+        pass
     else:
         st.warning("Please select an HCP record from the main page first.")
         if st.button("Back to Main Page"):
