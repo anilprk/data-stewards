@@ -861,14 +861,14 @@ def render_main_page(session):
             with response_container:
                 st.subheader("Search Results")
                 display_results_table(content=assistant_messages[-1]["content"])
+                if "couldn't find any records matching your search" not in assistant_messages[-1]["content"]:
+                    st.button(label="Still wan't to proceed with the API Search?", type="primary")
 
             # Helper to safely get and format value
             def get_safe_value(record, key):
                 value = record.get(key)
                 return str(value) if pd.notna(value) and value is not None else 'N/A'
             
-            if "couldn't find any records matching your search" not in assistant_messages[-1]["content"]:
-                st.button(label="Still wan't to proceed with the API Search?", type="primary")
  # 2. Selected Record Details (Only appears when selected_hcp_id is set)
             if st.session_state.get("selected_hcp_id") and st.session_state.get("results_df") is not None:
                 
