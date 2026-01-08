@@ -862,7 +862,7 @@ def render_main_page(session):
                 st.subheader("Search Results")
                 display_results_table(content=assistant_messages[-1]["content"])
                 if "couldn't find any records matching your search" not in assistant_messages[-1]["content"]:
-                    st.button(label="Still wan't to proceed with the API Search?", type="primary")
+                    st.button(label="Still wan't to proceed with the API Search?", type="primary", on_click=get_enriched_data_from_llm(hcp_name=current_prompt, bypass=True))
 
             # Helper to safely get and format value
             def get_safe_value(record, key):
