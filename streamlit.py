@@ -633,7 +633,7 @@ def render_enrichment_page(session, selected_hcp_df):
 # --- LLM Data Enrichment Function (UPDATED TO FIND ALL SOURCES) ---
 # --- LLM Data Enrichment Function (UPDATED TO EXTRACT URLS) ---
 @st.cache_data(ttl=600)
-def get_enriched_data_from_llm( hcp_name, _session=session, hcp_df=pd.DataFrame(), bypass=False):
+def get_enriched_data_from_llm( hcp_name, hcp_df=pd.DataFrame(), bypass=False):
     if hcp_df.empty and bypass==False:
         return pd.DataFrame()
 
@@ -644,18 +644,18 @@ def get_enriched_data_from_llm( hcp_name, _session=session, hcp_df=pd.DataFrame(
     CORTEX_SEARCH_SERVICE = "CC_SEARCH_SERVICE_CS"
     COLUMNS = ["chunk", "chunk_index", "relative_path", "category"]
 
-    try:
-        root = Root(_session)
-        svc = (
-            root.databases[CORTEX_SEARCH_DATABASE]
-            .schemas[CORTEX_SEARCH_SCHEMA]
-            .cortex_search_services[CORTEX_SEARCH_SERVICE]
-        )
-    except Exception as e:
-        st.error(
-            f"Could not connect to the Cortex Search Service for enrichment. Error: {e}"
-        )
-        return pd.DataFrame()
+    # try:
+    #     root = Root(_session)
+    #     svc = (
+    #         root.databases[CORTEX_SEARCH_DATABASE]
+    #         .schemas[CORTEX_SEARCH_SCHEMA]
+    #         .cortex_search_services[CORTEX_SEARCH_SERVICE]
+    #     )
+    # except Exception as e:
+    #     st.error(
+    #         f"Could not connect to the Cortex Search Service for enrichment. Error: {e}"
+    #     )
+    #     return pd.DataFrame()
 
     selected_record = hcp_df.iloc[0].to_dict()
     search_query = f"{selected_record.get('NAME', '')} NPI {selected_record.get('NPI', '')}"
