@@ -637,12 +637,12 @@ def get_enriched_data_from_llm(hcp_name, hcp_df=pd.DataFrame(), bypass=False):
     if hcp_df.empty and bypass==False:
         return pd.DataFrame()
 
-    MODEL_NAME = "mistral-large"
-    NUM_CHUNKS = 30
-    CORTEX_SEARCH_DATABASE = "CORTEX_ANALYST_HCK"
-    CORTEX_SEARCH_SCHEMA = "PUBLIC"
-    CORTEX_SEARCH_SERVICE = "CC_SEARCH_SERVICE_CS"
-    COLUMNS = ["chunk", "chunk_index", "relative_path", "category"]
+    # MODEL_NAME = "mistral-large"
+    # NUM_CHUNKS = 30
+    # CORTEX_SEARCH_DATABASE = "CORTEX_ANALYST_HCK"
+    # CORTEX_SEARCH_SCHEMA = "PUBLIC"
+    # CORTEX_SEARCH_SERVICE = "CC_SEARCH_SERVICE_CS"
+    # COLUMNS = ["chunk", "chunk_index", "relative_path", "category"]
 
     # try:
     #     root = Root(_session)
@@ -698,7 +698,7 @@ def get_enriched_data_from_llm(hcp_name, hcp_df=pd.DataFrame(), bypass=False):
         # full_cmd = f"SELECT snowflake.cortex.complete('{MODEL_NAME}', $${final_prompt_with_context}$$) as response"
         #st.write(full_cmd)
 
-        hcp_data = get_details_for_hcp(selected_record.get("NAME", ""))
+        hcp_data = get_details_for_hcp(hcp_name if bypass==True >= 18 else selected_record.get('NAME', ''))
         hcp_data = standardize_value_lengths(hcp_data)
         df_response = pd.DataFrame(hcp_data)
                                             
