@@ -633,7 +633,7 @@ def render_enrichment_page(session, selected_hcp_df):
 # --- LLM Data Enrichment Function (UPDATED TO FIND ALL SOURCES) ---
 # --- LLM Data Enrichment Function (UPDATED TO EXTRACT URLS) ---
 @st.cache_data(ttl=600)
-def get_enriched_data_from_llm( hcp_name, hcp_df=pd.DataFrame(), bypass=False):
+def get_enriched_data_from_llm(hcp_name, hcp_df=pd.DataFrame(), bypass=False):
     if hcp_df.empty and bypass==False:
         return pd.DataFrame()
 
@@ -656,46 +656,46 @@ def get_enriched_data_from_llm( hcp_name, hcp_df=pd.DataFrame(), bypass=False):
     #         f"Could not connect to the Cortex Search Service for enrichment. Error: {e}"
     #     )
     #     return pd.DataFrame()
+    if not hcp_df.empty:
+        selected_record = hcp_df.iloc[0].to_dict()
+        search_query = f"{selected_record.get('NAME', '')} NPI {selected_record.get('NPI', '')}"
+        # --- PROMPT UPDATED TO EXTRACT URLS AS SOURCE ---
+        enrichment_prompt = f"""
+        You are a data extraction assistant. Your only job is to read the document text provided  in the <context> tags and your own LLM training data information available,  and then find the exact values for the fields in the required JSON structure.
+        Do not invent or infer information. If you cannot find a value for a specific field, return null.
 
-    selected_record = hcp_df.iloc[0].to_dict()
-    search_query = f"{selected_record.get('NAME', '')} NPI {selected_record.get('NPI', '')}"
-    # --- PROMPT UPDATED TO EXTRACT URLS AS SOURCE ---
-    enrichment_prompt = f"""
-    You are a data extraction assistant. Your only job is to read the document text provided  in the <context> tags and your own LLM training data information available,  and then find the exact values for the fields in the required JSON structure.
-    Do not invent or infer information. If you cannot find a value for a specific field, return null.
+        Your response MUST be ONLY a single, valid JSON object string.
+        The JSON object must follow this exact structure:
+        {{
+            "ID": "{selected_record.get('ID', '')}", "Name": "...", "Name_Score": "...", "Name_Source": ["..."],
+            "NPI": 0, "Address Line1": "...", "Address Line1_Score": "...", "Address Line1_Source": ["..."],
+            "Address Line2": "...", "Address Line2_Score": "...", "Address Line2_Source": ["..."],
+            "City": "...", "City_Score": "...", "City_Source": ["..."], "State": "...", "State_Score": "...", "State_Source": ["..."],
+            "ZIP": "...", "ZIP_Score": "...", "ZIP_Source": ["..."],
 
-    Your response MUST be ONLY a single, valid JSON object string.
-    The JSON object must follow this exact structure:
-    {{
-        "ID": "{selected_record.get('ID', '')}", "Name": "...", "Name_Score": "...", "Name_Source": ["..."],
-        "NPI": 0, "Address Line1": "...", "Address Line1_Score": "...", "Address Line1_Source": ["..."],
-        "Address Line2": "...", "Address Line2_Score": "...", "Address Line2_Source": ["..."],
-        "City": "...", "City_Score": "...", "City_Source": ["..."], "State": "...", "State_Score": "...", "State_Source": ["..."],
-        "ZIP": "...", "ZIP_Score": "...", "ZIP_Source": ["..."],
+            "HCO 1 ID": "...", "HCO 1 Name": "...", "HCO 1 NPI": "...", "HCO 1 Address Line1": "...", "HCO 1 Address Line2": "...", "HCO 1 City": "...", "HCO 1 State": "...", "HCO 1 ZIP": "...",
+            "HCO 2 ID": "...", "HCO 2 Name": "...", "HCO 2 NPI": "...", "HCO 2 Address Line1": "...", "HCO 2 Address Line2": "...", "HCO 2 City": "...", "HCO 2 State": "...", "HCO 2 ZIP": "...",
+            "HCO 3 ID": null, "HCO 3 Name": null, "HCO 3 NPI": null, "HCO 3 Address Line1": null, "HCO 3 Address Line2": null, "HCO 3 City": null, "HCO 3 State": null, "HCO 3 ZIP": null
+        }}
 
-        "HCO 1 ID": "...", "HCO 1 Name": "...", "HCO 1 NPI": "...", "HCO 1 Address Line1": "...", "HCO 1 Address Line2": "...", "HCO 1 City": "...", "HCO 1 State": "...", "HCO 1 ZIP": "...",
-        "HCO 2 ID": "...", "HCO 2 Name": "...", "HCO 2 NPI": "...", "HCO 2 Address Line1": "...", "HCO 2 Address Line2": "...", "HCO 2 City": "...", "HCO 2 State": "...", "HCO 2 ZIP": "...",
-        "HCO 3 ID": null, "HCO 3 Name": null, "HCO 3 NPI": null, "HCO 3 Address Line1": null, "HCO 3 Address Line2": null, "HCO 3 City": null, "HCO 3 State": null, "HCO 3 ZIP": null
-    }}
-
-    --- IMPORTANT RULES FOR SCORING & SOURCES ---
-    - The context contains text from different documents about an HCP(Health Care Provider). Your task is to find the source URL (like `https://npiregistry.cms.hhs.gov/...`) within the text chunks you use.
-    - For each proposed value, you MUST populate the corresponding *_Source field with a JSON array containing all full URLs you find that support the value.
-    - If you cannot find a specific URL for a piece of data, return an array containing the document's 'category' as a fallback.
-    - If no sources are found, return an empty array [].
-    - The *_Score represents your confidence of proposed information being correct verified through multiple sources for the HCP. For eg: For an HCP given in context, if you are able to verify it's demographic information from multiple sources then score would be high compared to if the information is only fetched from one source. 
-    -  Also in the *_Score fields, populate the confidence score in percentage(out of 100) followed by '%' and then followed by your reason for assigning that score to the respective field value proposed.
-    """
+        --- IMPORTANT RULES FOR SCORING & SOURCES ---
+        - The context contains text from different documents about an HCP(Health Care Provider). Your task is to find the source URL (like `https://npiregistry.cms.hhs.gov/...`) within the text chunks you use.
+        - For each proposed value, you MUST populate the corresponding *_Source field with a JSON array containing all full URLs you find that support the value.
+        - If you cannot find a specific URL for a piece of data, return an array containing the document's 'category' as a fallback.
+        - If no sources are found, return an empty array [].
+        - The *_Score represents your confidence of proposed information being correct verified through multiple sources for the HCP. For eg: For an HCP given in context, if you are able to verify it's demographic information from multiple sources then score would be high compared to if the information is only fetched from one source. 
+        -  Also in the *_Score fields, populate the confidence score in percentage(out of 100) followed by '%' and then followed by your reason for assigning that score to the respective field value proposed.
+        """
 
     try:
-        response = svc.search(search_query, COLUMNS, limit=NUM_CHUNKS)
-        context_for_prompt = json.dumps(response.json())
-        final_prompt_with_context = f"""
-        You are an expert assistant. Extract information from the CONTEXT to answer the QUESTION.
-        <context>{context_for_prompt}</context>
-        <question>{enrichment_prompt}</question>
-        """
-        full_cmd = f"SELECT snowflake.cortex.complete('{MODEL_NAME}', $${final_prompt_with_context}$$) as response"
+        # response = svc.search(search_query, COLUMNS, limit=NUM_CHUNKS)
+        # context_for_prompt = json.dumps(response.json())
+        # final_prompt_with_context = f"""
+        # You are an expert assistant. Extract information from the CONTEXT to answer the QUESTION.
+        # <context>{context_for_prompt}</context>
+        # <question>{enrichment_prompt}</question>
+        # """
+        # full_cmd = f"SELECT snowflake.cortex.complete('{MODEL_NAME}', $${final_prompt_with_context}$$) as response"
         #st.write(full_cmd)
 
         hcp_data = get_details_for_hcp(selected_record.get("NAME", ""))
