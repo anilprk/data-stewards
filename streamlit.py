@@ -1069,7 +1069,7 @@ elif st.session_state.current_view == "enrichment_page":
         # when a pop-up is active.
         if not st.session_state.show_popup:
             render_enrichment_page(session, selected_record_df)
-    elif st.session.bypass == True:
+    elif st.session_state.bypass == True:
         pass
     else:
         st.warning("Please select an HCP record from the main page first.")
