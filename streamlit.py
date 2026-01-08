@@ -1012,8 +1012,7 @@ class HCPData(BaseModel):
 
 def get_details_for_hcp(hcp_name, model_name="sonar"):
     user_query = f"""
-    Give me the NPI, Street, City (All CAPS), US State Code (E.g. TX for Texas), Province, Zipcode, Address Line 1, Address Line 2
-    Degree(s) of the health care provider in US named {hcp_name}
+    Give me the Name, Address Line 1, Address Line 2, City (All CAPS), US State Code (E.g. TX for Texas), Zipcode of the health care provider in US named {hcp_name}
     """
 
     completion = client.chat.completions.create(
