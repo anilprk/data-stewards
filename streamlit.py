@@ -234,8 +234,8 @@ def render_enrichment_page(session, selected_hcp_df):
     # --- LLM Data Enrichment Function (UPDATED TO FIND ALL SOURCES) ---
     # --- LLM Data Enrichment Function (UPDATED TO EXTRACT URLS) ---
     @st.cache_data(ttl=600)
-    def get_enriched_data_from_llm(_session, hcp_df):
-        if hcp_df.empty:
+    def get_enriched_data_from_llm( hcp_name, _session=session, hcp_df=pd.DataFrame(), bypass=False):
+        if hcp_df.empty and bypass != False:
             return pd.DataFrame()
     
         MODEL_NAME = "mistral-large"
@@ -501,7 +501,7 @@ def render_enrichment_page(session, selected_hcp_df):
 #end of Placeholder for a potential dialog to display over the main content
 
     with st.spinner("🚀 Contacting AI Assistant for Data Enrichment..."):
-        proposed_df = get_enriched_data_from_llm(session, selected_hcp_df)
+        proposed_df = get_enriched_data_from_llm(hcp_df=selected_hcp_df)
         
     try:
         if current_df.empty or proposed_df.empty:
@@ -867,7 +867,8 @@ def render_main_page(session):
                 value = record.get(key)
                 return str(value) if pd.notna(value) and value is not None else 'N/A'
             
-
+            if "couldn't find any records matching your search" not in assistant_messages[-1]["content"]:
+                st.button(label="Still wan't to proceed with the API Search?", type="primary")
  # 2. Selected Record Details (Only appears when selected_hcp_id is set)
             if st.session_state.get("selected_hcp_id") and st.session_state.get("results_df") is not None:
                 
