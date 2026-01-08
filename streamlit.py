@@ -985,6 +985,8 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "results_df" not in st.session_state:
     st.session_state.results_df = None
+if "bypass" not in st.session_state:
+    st.session_state.bypass = False
 if "selected_hcp_id" not in st.session_state:
     st.session_state.selected_hcp_id = None
 if "current_view" not in st.session_state:
