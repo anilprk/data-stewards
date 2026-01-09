@@ -230,6 +230,92 @@ def render_enrichment_page(session, selected_hcp_df):
         unsafe_allow_html=True,
     )
 
+    # --- LLM Data Enrichment Function ---
+    # --- LLM Data Enrichment Function (UPDATED TO FIND ALL SOURCES) ---
+    # --- LLM Data Enrichment Function (UPDATED TO EXTRACT URLS) ---
+    @st.cache_data(ttl=600)
+    def get_enriched_data_from_llm(_session, hcp_df):
+        if hcp_df.empty:
+            return pd.DataFrame()
+    
+        MODEL_NAME = "mistral-large"
+        NUM_CHUNKS = 30
+        CORTEX_SEARCH_DATABASE = "CORTEX_ANALYST_HCK"
+        CORTEX_SEARCH_SCHEMA = "PUBLIC"
+        CORTEX_SEARCH_SERVICE = "CC_SEARCH_SERVICE_CS"
+        COLUMNS = ["chunk", "chunk_index", "relative_path", "category"]
+    
+        try:
+            root = Root(_session)
+            svc = (
+                root.databases[CORTEX_SEARCH_DATABASE]
+                .schemas[CORTEX_SEARCH_SCHEMA]
+                .cortex_search_services[CORTEX_SEARCH_SERVICE]
+            )
+        except Exception as e:
+            st.error(
+                f"Could not connect to the Cortex Search Service for enrichment. Error: {e}"
+            )
+            return pd.DataFrame()
+    
+        selected_record = hcp_df.iloc[0].to_dict()
+        search_query = f"{selected_record.get('NAME', '')} NPI {selected_record.get('NPI', '')}"
+        # --- PROMPT UPDATED TO EXTRACT URLS AS SOURCE ---
+        enrichment_prompt = f"""
+        You are a data extraction assistant. Your only job is to read the document text provided  in the <context> tags and your own LLM training data information available,  and then find the exact values for the fields in the required JSON structure.
+        Do not invent or infer information. If you cannot find a value for a specific field, return null.
+    
+        Your response MUST be ONLY a single, valid JSON object string.
+        The JSON object must follow this exact structure:
+        {{
+            "ID": "{selected_record.get('ID', '')}", "Name": "...", "Name_Score": "...", "Name_Source": ["..."],
+            "NPI": 0, "Address Line1": "...", "Address Line1_Score": "...", "Address Line1_Source": ["..."],
+            "Address Line2": "...", "Address Line2_Score": "...", "Address Line2_Source": ["..."],
+            "City": "...", "City_Score": "...", "City_Source": ["..."], "State": "...", "State_Score": "...", "State_Source": ["..."],
+            "ZIP": "...", "ZIP_Score": "...", "ZIP_Source": ["..."],
+    
+            "HCO 1 ID": "...", "HCO 1 Name": "...", "HCO 1 NPI": "...", "HCO 1 Address Line1": "...", "HCO 1 Address Line2": "...", "HCO 1 City": "...", "HCO 1 State": "...", "HCO 1 ZIP": "...",
+            "HCO 2 ID": "...", "HCO 2 Name": "...", "HCO 2 NPI": "...", "HCO 2 Address Line1": "...", "HCO 2 Address Line2": "...", "HCO 2 City": "...", "HCO 2 State": "...", "HCO 2 ZIP": "...",
+            "HCO 3 ID": null, "HCO 3 Name": null, "HCO 3 NPI": null, "HCO 3 Address Line1": null, "HCO 3 Address Line2": null, "HCO 3 City": null, "HCO 3 State": null, "HCO 3 ZIP": null
+        }}
+    
+        --- IMPORTANT RULES FOR SCORING & SOURCES ---
+        - The context contains text from different documents about an HCP(Health Care Provider). Your task is to find the source URL (like `https://npiregistry.cms.hhs.gov/...`) within the text chunks you use.
+        - For each proposed value, you MUST populate the corresponding *_Source field with a JSON array containing all full URLs you find that support the value.
+        - If you cannot find a specific URL for a piece of data, return an array containing the document's 'category' as a fallback.
+        - If no sources are found, return an empty array [].
+        - The *_Score represents your confidence of proposed information being correct verified through multiple sources for the HCP. For eg: For an HCP given in context, if you are able to verify it's demographic information from multiple sources then score would be high compared to if the information is only fetched from one source. 
+        -  Also in the *_Score fields, populate the confidence score in percentage(out of 100) followed by '%' and then followed by your reason for assigning that score to the respective field value proposed.
+        """
+
+        # Connect --> Connection string
+    
+        try:
+            response = svc.search(search_query, COLUMNS, limit=NUM_CHUNKS)
+            context_for_prompt = json.dumps(response.json())
+            final_prompt_with_context = f"""
+            You are an expert assistant. Extract information from the CONTEXT to answer the QUESTION.
+            <context>{context_for_prompt}</context>
+            <question>{enrichment_prompt}</question>
+            """
+            full_cmd = f"SELECT snowflake.cortex.complete('{MODEL_NAME}', $${final_prompt_with_context}$$) as response"
+            #st.write(full_cmd)
+
+            api_response = get_consolidated_data_for_hcp(selected_record, model_name="sonar-pro", use_pro_search=True)
+            # hcp_data = standardize_value_lengths(api_response.hcp_data)
+            # df_response = pd.DataFrame(hcp_data)
+                                              
+            # if df_response.empty:
+            #     st.warning("The AI assistant returned an empty response.")
+            #     return pd.DataFrame()
+            # else:
+            #     return df_response
+            return api_response
+        
+        except Exception as e:
+            st.error(f"An error occurred during the AI enrichment process: {e}")
+            return pd.DataFrame()
+
     # --- Main Application Logic for Enrichment Page ---
     #st.title("📑 Current vs. Proposed Comparison Report")
     st.markdown("<h3>📑 Current vs. Proposed Comparison Report</h3>", unsafe_allow_html=True)
@@ -418,10 +504,13 @@ def render_enrichment_page(session, selected_hcp_df):
 #end of Placeholder for a potential dialog to display over the main content
 
     with st.spinner("🚀 Contacting AI Assistant for Data Enrichment..."):
-        proposed_df = get_enriched_data_from_llm(hcp_df=selected_hcp_df)
-        
+        # proposed_df = get_enriched_data_from_llm(session, selected_hcp_df)
+        api_response = get_enriched_data_from_llm(session, selected_hcp_df)
+        proposed_hcp_data_df = pd.DataFrame(api_response['hcp_data'])
+        proposed_hcp_affiliation_data_df = pd.DataFrame(api_response['hcp_affiliation_data'])
+
     try:
-        if current_df.empty or proposed_df.empty:
+        if current_df.empty or proposed_hcp_data_df.empty:
             st.warning("Could not generate a comparison report.")
             st.stop()
     except AttributeError:
@@ -430,12 +519,12 @@ def render_enrichment_page(session, selected_hcp_df):
 
     selected_id = int(current_df['ID'].iloc[0])
     current_record = current_df.iloc[0]
-    proposed_record = proposed_df.iloc[0]
+    proposed_hcp_data_record = proposed_hcp_data_df.iloc[0]
 
 
 #session state for proposed record
 
-    st.session_state.proposed_record = proposed_record
+    st.session_state.proposed_hcp_data_record = proposed_hcp_data_record
     
     if "demographic_expander_state" not in st.session_state:
         st.session_state.demographic_expander_state = False
@@ -469,10 +558,10 @@ def render_enrichment_page(session, selected_hcp_df):
 
         for field_label, col_name in provider_mapping.items():
             current_val = current_record.get(col_name, "")
-            proposed_val = proposed_record.get(col_name, "")
-            score = proposed_record.get(f"{col_name}_Score", 0)
+            proposed_val = proposed_hcp_data_record.get(col_name, "")
+            score = proposed_hcp_data_record.get(f"{col_name}_Score", 0)
             
-            source_data = proposed_record.get(f"{col_name}_Source")
+            source_data = proposed_hcp_data_record.get(f"{col_name}_Source")
             source_display = "N/A"
             if isinstance(source_data, list) and source_data:
                 generic_urls = []
@@ -547,18 +636,22 @@ def render_enrichment_page(session, selected_hcp_df):
         if hcp_npi:
             query = f"SELECT * FROM HCP_HCO_AFFILIATION WHERE HCP_NPI = '{hcp_npi}'"
             db_affiliations_df = session.sql(query).to_pandas()
-        
+
+        # Build ai_found_hcos from proposed_hcp_affiliation_data_df
         ai_found_hcos = []
-        for i in [1, 2, 3]:
-            hco_name = proposed_record.get(f"HCO {i} Name")
-            if pd.notna(hco_name) and str(hco_name).strip() != "":
-                ai_found_hcos.append({
-                    "HCO ID": proposed_record.get(f"HCO {i} ID"),
-                    "HCO NAME": hco_name, "HCO NPI": proposed_record.get(f"HCO {i} NPI"),
-                    "HCO ADDRESS": f"{proposed_record.get(f'HCO {i} Address Line1', '')}, {proposed_record.get(f'HCO {i} Address Line2', '')}".strip(", "),
-                    "HCO CITY": proposed_record.get(f"HCO {i} City", ""), "HCO STATE": proposed_record.get(f"HCO {i} State", ""),"HCO ZIP": proposed_record.get(f"HCO {i} ZIP", ""),
-                })
-        
+        # st.write("DEBUG - proposed_hcp_affiliation_data_df columns:", proposed_hcp_affiliation_data_df.columns.tolist())
+        # st.write("DEBUG - proposed_hcp_affiliation_data_df:", proposed_hcp_affiliation_data_df)
+        if not proposed_hcp_affiliation_data_df.empty:
+            for index, row in proposed_hcp_affiliation_data_df.iterrows():
+                hco_name = row.get('HCO_Name')
+                if pd.notna(hco_name) and str(hco_name).strip() != "":
+                    ai_found_hcos.append({
+                        "HCO ID": row.get('HCO_ID'),
+                        "HCO NAME": hco_name, "HCO NPI": row.get('NPI'),
+                        "HCO ADDRESS": row.get('HCO_Address1', ''),
+                        "HCO CITY": row.get('HCO_City', ''), "HCO STATE": row.get('HCO_State', ''), "HCO ZIP": row.get('HCO_ZIP', ''),
+                    })
+
         all_affiliations = {}
         if not db_affiliations_df.empty:
             for index, row in db_affiliations_df.iterrows():
@@ -570,14 +663,15 @@ def render_enrichment_page(session, selected_hcp_df):
                     "HCO ADDRESS": f"{row.get('HCO_ADDRESS1', '')}, {row.get('HCO_ADDRESS2', '')}".strip(", "),
                     "HCO CITY": row.get('HCO_CITY'), "HCO STATE": row.get('HCO_STATE'), "HCO ZIP": row.get('HCO_ZIP'),
                 }
-        
-        for hco in ai_found_hcos:
+
+        for idx, hco in enumerate(ai_found_hcos):
             hco_id = hco.get('HCO ID')
-            if not hco_id or hco_id in all_affiliations: continue
             hco["SOURCE"] = "Generated by AI"
             hco["HCP_NPI"] = None
-            all_affiliations[hco_id] = hco
-            
+            # Use a unique key for AI-generated entries (use index if no HCO ID)
+            key = hco_id if hco_id and hco_id not in all_affiliations else f"ai_generated_{idx}"
+            all_affiliations[key] = hco
+
         if not all_affiliations:
             st.info("No HCO affiliations were found.")
         else:
@@ -627,90 +721,6 @@ def render_enrichment_page(session, selected_hcp_df):
                 row_cols[8].write(hco_data.get("HCO ZIP", ""))
 
 #----------end of provider_info_change
-
-
-# --- LLM Data Enrichment Function ---
-# --- LLM Data Enrichment Function (UPDATED TO FIND ALL SOURCES) ---
-# --- LLM Data Enrichment Function (UPDATED TO EXTRACT URLS) ---
-@st.cache_data(ttl=600)
-def get_enriched_data_from_llm(hcp_name, hcp_df=pd.DataFrame(), bypass=False):
-    if hcp_df.empty and bypass==False:
-        return pd.DataFrame()
-
-    # MODEL_NAME = "mistral-large"
-    # NUM_CHUNKS = 30
-    # CORTEX_SEARCH_DATABASE = "CORTEX_ANALYST_HCK"
-    # CORTEX_SEARCH_SCHEMA = "PUBLIC"
-    # CORTEX_SEARCH_SERVICE = "CC_SEARCH_SERVICE_CS"
-    # COLUMNS = ["chunk", "chunk_index", "relative_path", "category"]
-
-    # try:
-    #     root = Root(_session)
-    #     svc = (
-    #         root.databases[CORTEX_SEARCH_DATABASE]
-    #         .schemas[CORTEX_SEARCH_SCHEMA]
-    #         .cortex_search_services[CORTEX_SEARCH_SERVICE]
-    #     )
-    # except Exception as e:
-    #     st.error(
-    #         f"Could not connect to the Cortex Search Service for enrichment. Error: {e}"
-    #     )
-    #     return pd.DataFrame()
-    if not hcp_df.empty:
-        selected_record = hcp_df.iloc[0].to_dict()
-        search_query = f"{selected_record.get('NAME', '')} NPI {selected_record.get('NPI', '')}"
-        # --- PROMPT UPDATED TO EXTRACT URLS AS SOURCE ---
-        enrichment_prompt = f"""
-        You are a data extraction assistant. Your only job is to read the document text provided  in the <context> tags and your own LLM training data information available,  and then find the exact values for the fields in the required JSON structure.
-        Do not invent or infer information. If you cannot find a value for a specific field, return null.
-
-        Your response MUST be ONLY a single, valid JSON object string.
-        The JSON object must follow this exact structure:
-        {{
-            "ID": "{selected_record.get('ID', '')}", "Name": "...", "Name_Score": "...", "Name_Source": ["..."],
-            "NPI": 0, "Address Line1": "...", "Address Line1_Score": "...", "Address Line1_Source": ["..."],
-            "Address Line2": "...", "Address Line2_Score": "...", "Address Line2_Source": ["..."],
-            "City": "...", "City_Score": "...", "City_Source": ["..."], "State": "...", "State_Score": "...", "State_Source": ["..."],
-            "ZIP": "...", "ZIP_Score": "...", "ZIP_Source": ["..."],
-
-            "HCO 1 ID": "...", "HCO 1 Name": "...", "HCO 1 NPI": "...", "HCO 1 Address Line1": "...", "HCO 1 Address Line2": "...", "HCO 1 City": "...", "HCO 1 State": "...", "HCO 1 ZIP": "...",
-            "HCO 2 ID": "...", "HCO 2 Name": "...", "HCO 2 NPI": "...", "HCO 2 Address Line1": "...", "HCO 2 Address Line2": "...", "HCO 2 City": "...", "HCO 2 State": "...", "HCO 2 ZIP": "...",
-            "HCO 3 ID": null, "HCO 3 Name": null, "HCO 3 NPI": null, "HCO 3 Address Line1": null, "HCO 3 Address Line2": null, "HCO 3 City": null, "HCO 3 State": null, "HCO 3 ZIP": null
-        }}
-
-        --- IMPORTANT RULES FOR SCORING & SOURCES ---
-        - The context contains text from different documents about an HCP(Health Care Provider). Your task is to find the source URL (like `https://npiregistry.cms.hhs.gov/...`) within the text chunks you use.
-        - For each proposed value, you MUST populate the corresponding *_Source field with a JSON array containing all full URLs you find that support the value.
-        - If you cannot find a specific URL for a piece of data, return an array containing the document's 'category' as a fallback.
-        - If no sources are found, return an empty array [].
-        - The *_Score represents your confidence of proposed information being correct verified through multiple sources for the HCP. For eg: For an HCP given in context, if you are able to verify it's demographic information from multiple sources then score would be high compared to if the information is only fetched from one source. 
-        -  Also in the *_Score fields, populate the confidence score in percentage(out of 100) followed by '%' and then followed by your reason for assigning that score to the respective field value proposed.
-        """
-
-    try:
-        # response = svc.search(search_query, COLUMNS, limit=NUM_CHUNKS)
-        # context_for_prompt = json.dumps(response.json())
-        # final_prompt_with_context = f"""
-        # You are an expert assistant. Extract information from the CONTEXT to answer the QUESTION.
-        # <context>{context_for_prompt}</context>
-        # <question>{enrichment_prompt}</question>
-        # """
-        # full_cmd = f"SELECT snowflake.cortex.complete('{MODEL_NAME}', $${final_prompt_with_context}$$) as response"
-        #st.write(full_cmd)
-
-        hcp_data = get_details_for_hcp(hcp_name if bypass==True else selected_record.get('NAME', ''))
-        hcp_data = standardize_value_lengths(hcp_data)
-        df_response = pd.DataFrame(hcp_data)
-                                            
-        if df_response.empty:
-            st.warning("The AI assistant returned an empty response.")
-            return pd.DataFrame()
-        else:
-            return df_response
-    
-    except Exception as e:
-        st.error(f"An error occurred during the AI enrichment process: {e}")
-        return pd.DataFrame()
 
 
 
@@ -810,8 +820,10 @@ def render_main_page(session):
                     if not df.empty:
                         st.session_state.results_df = df
                         st.write("Please select a record from the table to proceed:")
+                        # Define Column Sizes & Heading Names
                         cols = st.columns((0.8, 0.8, 1.2, 1, 2, 1, 0.5))
                         headers = ["Select", "ID", "Name", "NPI", "Address", "City", "State"]
+
                         for col_header, header_name in zip(cols, headers):
                             col_header.markdown(f"**{header_name}**")
 
@@ -862,17 +874,13 @@ def render_main_page(session):
             with response_container:
                 st.subheader("Search Results")
                 display_results_table(content=assistant_messages[-1]["content"])
-                if "couldn't find any records matching your search" not in assistant_messages[-1]["content"]:
-                    st.button(label="Still wan't to proceed with the API Search?", type="primary", on_click= lambda: get_enriched_data_from_llm(hcp_name=current_prompt,bypass=True))
-                    st.session_state.current_view = "enrichment_page"
-                    st.session_state.bypass = True
-                    st.rerun()
 
             # Helper to safely get and format value
             def get_safe_value(record, key):
                 value = record.get(key)
                 return str(value) if pd.notna(value) and value is not None else 'N/A'
             
+
  # 2. Selected Record Details (Only appears when selected_hcp_id is set)
             if st.session_state.get("selected_hcp_id") and st.session_state.get("results_df") is not None:
                 
@@ -985,8 +993,6 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "results_df" not in st.session_state:
     st.session_state.results_df = None
-if "bypass" not in st.session_state:
-    st.session_state.bypass = False
 if "selected_hcp_id" not in st.session_state:
     st.session_state.selected_hcp_id = None
 if "current_view" not in st.session_state:
@@ -1017,18 +1023,70 @@ class HCPData(BaseModel):
     City: list[str]
     State: list[str]
 
-def get_details_for_hcp(hcp_name, model_name="sonar"):
+class HCPAffiliationData(BaseModel):
+    NPI: list[str]
+    HCO_ID: list[str]
+    HCO_Name: list[str]
+    HCO_Address1: list[str]
+    HCO_City: list[str]
+    HCO_State: list[str]
+    HCO_ZIP: list[str]
+
+class SearchResponse(BaseModel):
+    hcp_data: HCPData
+    hcp_affiliation_data: HCPAffiliationData
+    
+
+def get_consolidated_data_for_hcp(hcp_data, model_name="sonar", use_pro_search=False):
+    # Extract key info for better search - handle both dict and pandas Series
+    if hasattr(hcp_data, 'to_dict'):
+        hcp_data = hcp_data.to_dict()
+    hcp_name = hcp_data.get('NAME', '') if isinstance(hcp_data, dict) else str(hcp_data)
+    hcp_npi = hcp_data.get('NPI', '') if isinstance(hcp_data, dict) else ''
+    
     user_query = f"""
-    Give me the Name, Address Line 1, Address Line 2, City (All CAPS), US State Code (E.g. TX for Texas), Zipcode of the health care provider in US named {hcp_name}
+    Search the web for information about this US healthcare provider:
+    
+    Name: {hcp_name}
+    NPI: {hcp_npi}
+
+    Find and return:
+
+    **Part 1 - Provider Demographics (verify/update from web sources):**
+    - Name: Full name of the doctor/provider
+    - Address Line 1: Current practice street address
+    - Address Line 2: Suite/unit number (or empty string if none)
+    - City: City name in ALL CAPS
+    - State: 2-letter US state code (e.g., TX, CA, NY)
+    - ZIP: 5-digit zipcode
+
+    **Part 2 - Practice/Hospital Affiliation:**
+    Search NPI Registry, hospital websites, Healthgrades, Vitals, WebMD, or Doximity for where this doctor practices.
+    - NPI: The organization's NPI number (10 digits) - search npiregistry.cms.hhs.gov
+    - HCO_ID: Use the organization NPI as ID, or "N/A" if not found
+    - HCO_Name: Name of the hospital, medical group, or clinic where they practice
+    - HCO_Address1: Street address of the practice location
+    - HCO_City: City in ALL CAPS
+    - HCO_State: 2-letter state code
+    - HCO_ZIP: 5-digit zipcode
+
+    **Search Tips:**
+    - Search "{hcp_name} doctor hospital affiliation"
+    - Search "{hcp_name} NPI {hcp_npi}" on npiregistry.cms.hhs.gov
+    - Look for "practices at", "affiliated with", "hospital privileges"
+    - Return actual found data, not "N/A" unless truly not findable
     """
 
     completion = client.chat.completions.create(
         model=model_name,
         messages=[{"role": "user", "content": user_query}],
+        web_search_options={
+            "search_type": "pro" if use_pro_search else "fast"
+        },  
         response_format={
             "type": "json_schema",
             "json_schema": {
-                "schema": HCPData.model_json_schema()
+                "schema": SearchResponse.model_json_schema()
             }
         }
     )
@@ -1071,8 +1129,6 @@ elif st.session_state.current_view == "enrichment_page":
         # when a pop-up is active.
         if not st.session_state.show_popup:
             render_enrichment_page(session, selected_record_df)
-    elif st.session_state.bypass == True:
-        pass
     else:
         st.warning("Please select an HCP record from the main page first.")
         if st.button("Back to Main Page"):
