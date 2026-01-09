@@ -1062,7 +1062,7 @@ def get_consolidated_data_for_hcp(hcp_data, model_name="sonar", use_pro_search=F
 
     **Part 2 - Practice/Hospital Affiliation:**
     Search NPI Registry, hospital websites, Healthgrades, Vitals, WebMD, or Doximity for where this doctor practices.
-    - NPI: The organization's NPI number (10 digits) - search npiregistry.cms.hhs.gov
+    - NPI: The HCP (Health Care Provider)'s NPI number (10 digits) - search npiregistry.cms.hhs.gov
     - HCO_ID: Use the organization NPI as ID, or "N/A" if not found
     - HCO_Name: Name of the hospital, medical group, or clinic where they practice
     - HCO_Address1: Street address of the practice location
