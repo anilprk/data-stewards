@@ -672,6 +672,7 @@ def render_enrichment_page(session, selected_hcp_df):
             key = hco_id if hco_id and hco_id not in all_affiliations else f"ai_generated_{idx}"
             all_affiliations[key] = hco
 
+        st.write(all_affiliations)
         st.write(all_affiliations.items())
         
         if not all_affiliations:
