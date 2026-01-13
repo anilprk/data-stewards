@@ -671,8 +671,6 @@ def render_enrichment_page(session, selected_hcp_df):
             # Use a unique key for AI-generated entries (use index if no HCO ID)
             key = hco_id if hco_id and hco_id not in all_affiliations else f"ai_generated_{idx}"
             all_affiliations[key] = hco
-
-        st.write([true_primary_hco_id, true_primary_hco_id is not None, key] for key, value in all_affiliations.items())
         
         if not all_affiliations:
             st.info("No HCO affiliations were found.")
