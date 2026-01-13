@@ -673,6 +673,8 @@ def render_enrichment_page(session, selected_hcp_df):
             all_affiliations[key] = hco
 
         st.dataframe(all_affiliations)
+        st.write(db_affiliations_df)
+
         
         if not all_affiliations:
             st.info("No HCO affiliations were found.")
