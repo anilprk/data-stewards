@@ -672,7 +672,11 @@ def render_enrichment_page(session, selected_hcp_df):
             key = hco_id if hco_id and hco_id not in all_affiliations else f"ai_generated_{idx}"
             all_affiliations[key] = hco
 
-        st.write((pd.notna(key), int(key)) for key, value in all_affiliations.items())
+        st.write(lambda item: (
+                    print(pd.notna(item[0]) and
+                    true_primary_hco_id is not None and
+                    int(item[0]) == true_primary_hco_id)
+                ) for key, value in all_affiliations.items())
         
         if not all_affiliations:
             st.info("No HCO affiliations were found.")
