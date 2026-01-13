@@ -680,7 +680,7 @@ def render_enrichment_page(session, selected_hcp_df):
             sorted_affiliations = sorted(
                 all_affiliations.items(),
                 key=lambda item: (
-                    item[0] != "N/A" and
+                    hco_id != "N/A" and
                     true_primary_hco_id is not None and
                     int(item[0]) == true_primary_hco_id
                 ),
@@ -690,7 +690,7 @@ def render_enrichment_page(session, selected_hcp_df):
             for hco_id, hco_data in sorted_affiliations:
                 row_cols = st.columns([1.5, 2, 1.5, 1.5, 2.5, 2, 1.5, 1.5, 1.5])
                 
-                is_primary = pd.notna(hco_id) and true_primary_hco_id is not None and int(hco_id) == true_primary_hco_id
+                is_primary = hco_id != "N/A" and true_primary_hco_id is not None and int(hco_id) == true_primary_hco_id
                 
                 with row_cols[0]:
                     if is_primary:
