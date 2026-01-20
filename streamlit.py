@@ -645,7 +645,7 @@ def render_enrichment_page(session, selected_hcp_df):
                 if pd.notna(hco_name) and str(hco_name).strip() != "":
                     ai_found_hcos.append({
                         "HCO ID": row.get('HCO_ID'),
-                        "HCP NPI": row.get('NPI),
+                        "HCP NPI": row.get('NPI'),
                         "HCO NAME": hco_name, "HCO NPI": row.get('NPI'),
                         "HCO ADDRESS": row.get('HCO_Address1', ''),
                         "HCO CITY": row.get('HCO_City', ''), "HCO STATE": row.get('HCO_State', ''), "HCO ZIP": row.get('HCO_ZIP', ''),
