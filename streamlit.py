@@ -650,7 +650,7 @@ def render_enrichment_page(session, selected_hcp_df):
                         "HCO ADDRESS": row.get('HCO_Address1', ''),
                         "HCO CITY": row.get('HCO_City', ''), "HCO STATE": row.get('HCO_State', ''), "HCO ZIP": row.get('HCO_ZIP', ''),
                     })
-
+        st.write(ai_found_hcos)
         all_affiliations = {}
         if not db_affiliations_df.empty:
             for index, row in db_affiliations_df.iterrows():
