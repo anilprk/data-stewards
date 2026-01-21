@@ -12,6 +12,8 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 from perplexity import Perplexity
 
+# Set Perplexity API key from Streamlit secrets
+os.environ["PERPLEXITY_API_KEY"] = st.secrets["perplexity"]["api_key"]
 
 # --- SNOWFLAKE CONNECTION FOR STREAMLIT COMMUNITY CLOUD ---
 @st.cache_resource
@@ -151,7 +153,15 @@ def render_enrichment_page(session, selected_hco_df):
         st.stop()
         
     selected_record = selected_hco_df.iloc[0]
-    current_data_dict = { 'ID': selected_record.get('ID', ''), 'Name': selected_record.get('NAME', ''), 'NPI': selected_record.get('NPI', ''), 'Address Line1': selected_record.get('ADDRESS1', ''), 'Address Line2': selected_record.get('ADDRESS2', ''), 'City': selected_record.get('CITY', ''), 'State': selected_record.get('STATE', ''), 'ZIP': selected_record.get('ZIP', '') }
+    
+    # Helper to get value with fallback to HCO_ prefixed column
+    def get_val(record, key):
+        val = record.get(key)
+        if val is None or (isinstance(val, float) and pd.isna(val)):
+            val = record.get(f"HCO_{key}")
+        return val if val is not None and not (isinstance(val, float) and pd.isna(val)) else ''
+    
+    current_data_dict = { 'ID': get_val(selected_record, 'ID'), 'Name': get_val(selected_record, 'NAME'), 'NPI': get_val(selected_record, 'NPI'), 'Address Line1': get_val(selected_record, 'ADDRESS1'), 'Address Line2': get_val(selected_record, 'ADDRESS2'), 'City': get_val(selected_record, 'CITY'), 'State': get_val(selected_record, 'STATE'), 'ZIP': get_val(selected_record, 'ZIP') }
     current_df = pd.DataFrame([current_data_dict])
 
     # Placeholder for a potential dialog to display over the main content
@@ -175,13 +185,13 @@ def render_enrichment_page(session, selected_hco_df):
             changes_to_display = []
             for field_label, db_col in provider_mapping.items():
                 if field_label in approved_df_cols:
-                    current_val = selected_record.get(db_col)
+                    current_val = get_val(selected_record, db_col)
                     proposed_val = proposed_record.get(field_label)
                     changes_to_display.append([field_label, current_val, proposed_val])
             
             if changes_to_display:
                 st.markdown("---")
-                st.markdown(f"**Changes to be applied for Account ID: `{selected_record.get('ID')}`**")
+                st.markdown(f"**Changes to be applied for Account ID: `{get_val(selected_record, 'ID')}`**")
                 
                 # Use st.columns to simulate a two-column table for styling
                 cols_header = st.columns([2, 2, 2])
@@ -202,7 +212,9 @@ def render_enrichment_page(session, selected_hco_df):
             # Table 2: All other record details (not being changed)
             remaining_details_to_display = []
             all_fields = list(selected_record.index)
-            change_fields = [provider_mapping[col] for col in approved_df_cols] + ["ID"]
+            # Include both ID and HCO_ID variants in change_fields
+            change_fields = [provider_mapping[col] for col in approved_df_cols] + ["ID", "HCO_ID"]
+            change_fields += [f"HCO_{provider_mapping[col]}" for col in approved_df_cols]
             
             for field in all_fields:
                 if field not in change_fields:
@@ -291,8 +303,8 @@ def render_enrichment_page(session, selected_hco_df):
             primary_change_df = pd.DataFrame({
                 "Field": ["ID", "Name", "Current Primary HCO", "Proposed Primary HCO"],
                 "Value": [
-                    selected_record.get('ID'),
-                    selected_record.get('NAME'),
+                    get_val(selected_record, 'ID'),
+                    get_val(selected_record, 'NAME'),
                     f"ID: {current_primary_id} ({current_primary_name})",
                     f"ID: {new_primary_id} ({new_primary_name})"
                 ]
@@ -370,9 +382,13 @@ def render_enrichment_page(session, selected_hco_df):
         unsafe_allow_html=True
     )
 
+    # Helper to get current_record value (current_df uses keys like 'Name', 'Address Line1')
+    def get_current_val(key):
+        val = current_record.get(key)
+        return val if val is not None and val != '' else ''
     
     #provider_info_change
-    provider_info_title = f"Address information of : {current_record.get('Name', 'N/A')}"
+    provider_info_title = f"Address information of : {current_record.get('Name', '') or current_record.get('HCO_NAME', 'N/A')}"
     
     with st.expander(provider_info_title, expanded=st.session_state.demographic_expander_state): 
         
@@ -384,7 +400,7 @@ def render_enrichment_page(session, selected_hco_df):
         provider_mapping = { "Name": "Name", "Address Line 1": "Address Line1", "Address Line 2": "Address Line2", "City": "City", "State": "State", "ZIP Code": "ZIP" }
 
         for field_label, col_name in provider_mapping.items():
-            current_val = current_record.get(col_name, "")
+            current_val = get_current_val(col_name) or ""
             proposed_val = proposed_hcp_data_record.get(col_name, "")
             score = proposed_hcp_data_record.get(f"{col_name}_Score", 0)
             
@@ -447,7 +463,7 @@ def render_enrichment_page(session, selected_hco_df):
 
     st.markdown("<hr style='margin-top: 0; margin-bottom: 0; border-top: 1px solid #ccc;'>", unsafe_allow_html=True)
     
-    hco_affiliation_title = f"HCO Affiliation information of : {current_record.get('Name', 'N/A')}"
+    hco_affiliation_title = f"HCO Affiliation information of : {current_record.get('Name', '') or current_record.get('HCO_NAME', 'N/A')}"
     
     with st.expander(hco_affiliation_title, expanded=False):
         
@@ -459,7 +475,7 @@ def render_enrichment_page(session, selected_hco_df):
         primary_id_val = selected_record.get("PRIMARY_AFFL_HCO_ACCOUNT_ID")
         true_primary_hco_id = int(primary_id_val) if pd.notna(primary_id_val) else None
         
-        hcp_npi = current_record.get("NPI")
+        hcp_npi = current_record.get("NPI") or current_record.get("HCO_NPI")
         db_affiliations_df = pd.DataFrame()
         if hcp_npi:
             query = f"SELECT * FROM HCP_HCO_AFFILIATION WHERE HCP_NPI = '{hcp_npi}'"
@@ -644,24 +660,67 @@ def render_main_page(session):
                 f'This is our interpretation of your question : "{interpretation_clean}"'
             )
 
+    def ensure_join_in_sql(sql: str) -> str:
+        """
+        Ensures the SQL always includes a LEFT JOIN with OUTLET_HCO_AFFILIATION.
+        If Cortex only queries HCO table, wrap it to include the join.
+        """
+        sql_upper = sql.upper()
+        # Check if join is already present
+        if "OUTLET_HCO_AFFILIATION" in sql_upper or "LEFT OUTER JOIN" in sql_upper or "LEFT JOIN" in sql_upper:
+            return sql
+        
+        # Extract WHERE clause if present
+        where_clause = ""
+        if " WHERE " in sql_upper:
+            where_idx = sql_upper.index(" WHERE ")
+            where_clause = sql[where_idx:]
+            # Remove ORDER BY from where_clause for re-adding later
+            if " ORDER BY " in where_clause.upper():
+                order_idx = where_clause.upper().index(" ORDER BY ")
+                where_clause = where_clause[:order_idx]
+        
+        # Extract the name filter from WHERE clause
+        name_filter = ""
+        if "NAME ILIKE" in sql_upper:
+            import re
+            match = re.search(r"NAME\s+ILIKE\s+'([^']+)'", sql, re.IGNORECASE)
+            if match:
+                name_filter = match.group(1)
+        
+        if name_filter:
+            # Build a new query with guaranteed join
+            new_sql = f"""
+            SELECT h.ID, h.NAME, h.ADDRESS1, h.ADDRESS2, h.CITY, h.STATE, h.ZIP, h.COUNTRY,
+                   o.OUTLET_ID, o.OUTLET_NAME, o.OUTLET_ADDRESS1, o.OUTLET_CITY, o.OUTLET_STATE, o.OUTLET_ZIP
+            FROM CORTEX_ANALYST_HCK.PUBLIC.HCO h
+            LEFT OUTER JOIN CORTEX_ANALYST_HCK.PUBLIC.OUTLET_HCO_AFFILIATION o ON h.ID = o.HCO_ID
+            WHERE h.NAME ILIKE '{name_filter}'
+            ORDER BY h.NAME
+            """
+            return new_sql.strip()
+        
+        return sql
+
     def display_results_table(content: list):
         sql_item_found = False
         for item in content:
             if item["type"] == "sql":
                 sql_item_found = True
                 with st.spinner("Running SQL..."):
-                    df = session.sql(item["statement"]).to_pandas()
+                    original_sql = item["statement"]
+                    sql_to_run = ensure_join_in_sql(original_sql)
+                    df = session.sql(sql_to_run).to_pandas()
                     if not df.empty:
                         st.session_state.results_df = df
                         st.write("Please select a record from the table to proceed:")
+                        
                         # Define column sizes tuple (must match number of headers)
                         col_sizes = (0.8, 0.8, 2, 2, 1.5, 1)
-                        # col_sizes = (0.8, 2, 2, 1.5, 1)
 
                         # Define column heading names
                         cols = st.columns(col_sizes)
                         headers = ["Select", "ID", "Name", "Address", "City", "State"]
-                        # headers = ["Select", "Name", "Address", "City", "State"]
                         
                         # Render table headers
                         for col_header, header_name in zip(cols, headers):
@@ -669,7 +728,8 @@ def render_main_page(session):
 
                         # Render table rows
                         for index, row in df.iterrows():
-                            row_id = row.get("ID")
+                            # Check for ID column with various possible names from Cortex
+                            row_id = row.get("ID") if "ID" in row.index else row.get("HCO_ID")
                             if row_id is None or pd.isna(row_id):
                                 row_id = index  # Fallback to index if ID is NULL
                             is_selected = row_id == st.session_state.get("selected_hco_id")
@@ -682,10 +742,10 @@ def render_main_page(session):
                                     st.session_state.selected_hco_id = row_id
                                     st.rerun()
                             row_cols[1].write(row_id)
-                            row_cols[2].write(row.get("NAME", ""))
-                            row_cols[3].write(row.get("ADDRESS1", "N/A"))
-                            row_cols[4].write(row.get("CITY", "N/A"))
-                            row_cols[5].write(row.get("STATE", "N/A"))
+                            row_cols[2].write(row.get("NAME") or row.get("HCO_NAME", ""))
+                            row_cols[3].write(row.get("ADDRESS1") or row.get("HCO_ADDRESS1", "N/A"))
+                            row_cols[4].write(row.get("CITY") or row.get("HCO_CITY", "N/A"))
+                            row_cols[5].write(row.get("STATE") or row.get("HCO_STATE", "N/A"))
                     else:
                         st.info("We couldn't find any records matching your search.", icon="ℹ️")
         if not sql_item_found:
@@ -714,18 +774,25 @@ def render_main_page(session):
                 st.subheader("Search Results")
                 display_results_table(content=assistant_messages[-1]["content"])
 
-            # Helper to safely get and format value
+            # Helper to safely get and format value (handles both column naming conventions)
             def get_safe_value(record, key):
+                # Try original key first, then with HCO_ prefix
                 value = record.get(key)
+                if value is None or (isinstance(value, float) and pd.isna(value)):
+                    value = record.get(f"HCO_{key}")
                 return str(value) if pd.notna(value) and value is not None else 'N/A'
             
 
             # 2. Selected Record Details (Only appears when selected_hco_id is set)
             if st.session_state.get("selected_hco_id") and st.session_state.get("results_df") is not None:
-                
+                # Handle both ID and HCO_ID column names
+                id_col = "ID" if "ID" in st.session_state.results_df.columns else "HCO_ID"
+                # Convert both to string for comparison to avoid type mismatch
+                selected_id_str = str(st.session_state.selected_hco_id)
                 selected_record_df = st.session_state.results_df[
-                    st.session_state.results_df["ID"] == st.session_state.selected_hco_id
+                    st.session_state.results_df[id_col].astype(str) == selected_id_str
                 ]
+
                 
                 if not selected_record_df.empty:
                     
@@ -742,8 +809,8 @@ def render_main_page(session):
                         with st.container(border=True):
                             
                             # ID and Name in the required structure (single line)
-                            hcp_id = get_safe_value(selected_record, 'ID')
-                            hcp_name = get_safe_value(selected_record, 'NAME')
+                            hcp_id = get_safe_value(selected_record, 'ID') if 'ID' in selected_record.index else get_safe_value(selected_record, 'HCO_ID')
+                            hcp_name = get_safe_value(selected_record, 'NAME') if 'NAME' in selected_record.index else get_safe_value(selected_record, 'HCO_NAME')
                             st.markdown(f'**ID:** {hcp_id} - {hcp_name}', unsafe_allow_html=True)
                             
                             st.markdown("<hr style='margin-top: 0; margin-bottom: 0; border-top: 1px solid #ccc;'>", unsafe_allow_html=True)
@@ -787,15 +854,15 @@ def render_main_page(session):
                         st.subheader("Primary HCO Affiliation Details")
                         with st.container(border=True):
                             hco_col1, hco_col2 = st.columns(2)
+                            primary_hco_id = selected_record.get("OUTLET_ID")
                             
-                            primary_hco_id = selected_record.get("PRIMARY_AFFL_HCO_ACCOUNT_ID")
-                            
-                            hco_col1.markdown(f'<div class="detail-key">HCP ID:</div><div class="detail-value">{get_safe_value(selected_record, "ID")}</div>', unsafe_allow_html=True)
+                            hco_col1.markdown(f'<div class="detail-key">Outlet ID:</div><div class="detail-value">{get_safe_value(selected_record, "OUTLET_ID")}</div>', unsafe_allow_html=True)
                             
                             hco_id_val = str(int(primary_hco_id)) if pd.notna(primary_hco_id) and primary_hco_id is not None else "N/A"
-                            hco_col2.markdown(f'<div class="detail-key">Primary HCO NPI:</div><div class="detail-value">{hco_id_val}</div>', unsafe_allow_html=True)
+
+                            hco_col2.markdown(f'<div class="detail-key">Outlet HCO NPI:</div><div class="detail-value">{hco_id_val}</div>', unsafe_allow_html=True)
                             
-                            hco_col1.markdown(f'<div class="detail-key">HCP Name:</div><div class="detail-value">{get_safe_value(selected_record, "NAME")}</div>', unsafe_allow_html=True)
+                            hco_col1.markdown(f'<div class="detail-key">Outlet Name:</div><div class="detail-value">{get_safe_value(selected_record, "OUTLET_NAME")}</div>', unsafe_allow_html=True)
                             # Removed the line for "Primary HCO Name" as requested.
                             
                             
@@ -859,7 +926,6 @@ class HCOData(BaseModel):
     Country: list[str]
 
 class HCOAffiliationData(BaseModel):
-    NPI: list[str]
     HCO_ID: list[str]
     HCO_Name: list[str]
     HCO_Address1: list[str]
@@ -876,12 +942,22 @@ def get_consolidated_data_for_hco(hco_data, model_name="sonar", use_pro_search=F
     # Extract key info for better search - handle both dict and pandas Series
     if hasattr(hco_data, 'to_dict'):
         hco_data = hco_data.to_dict()
-    hco_name = hco_data.get('NAME', '') if isinstance(hco_data, dict) else str(hco_data)
-    hco_address1 = hco_data.get('ADDRESS1', '') if isinstance(hco_data, dict) else str(hco_data)
-    hco_address2 = hco_data.get('ADDRESS2', '') if isinstance(hco_data, dict) else str(hco_data)
-    hco_city = hco_data.get('CITY', '') if isinstance(hco_data, dict) else str(hco_data)
-    hco_state = hco_data.get('STATE', '') if isinstance(hco_data, dict) else str(hco_data)
-    hco_zip = hco_data.get('ZIP', '') if isinstance(hco_data, dict) else str(hco_data)
+    
+    # Helper to get value with fallback to HCO_ prefixed key
+    def get_hco_val(key):
+        if isinstance(hco_data, dict):
+            val = hco_data.get(key, '')
+            if not val:
+                val = hco_data.get(f'HCO_{key}', '')
+            return val
+        return str(hco_data)
+    
+    hco_name = get_hco_val('NAME')
+    hco_address1 = get_hco_val('ADDRESS1')
+    hco_address2 = get_hco_val('ADDRESS2')
+    hco_city = get_hco_val('CITY')
+    hco_state = get_hco_val('STATE')
+    hco_zip = get_hco_val('ZIP')
     
     user_query = f"""
     Search the web for information about this US healthcare organization:
@@ -903,17 +979,21 @@ def get_consolidated_data_for_hco(hco_data, model_name="sonar", use_pro_search=F
     - State: 2-letter US state code (e.g., TX, CA, NY)
     - ZIP: 5-digit zipcode
 
-    **Part 2 - Affiliated Healthcare Providers:**
-    Search NPI Registry, hospital websites, Healthgrades, Vitals, WebMD, or Doximity for healthcare providers affiliated with this organization.
-    - NPI: The HCP (Health Care Provider)'s NPI number (10 digits) - search npiregistry.cms.hhs.gov or other sources
-    - HCO_ID: The organization's NPI or ID, or "N/A" if not found
-    - HCO_Name: Name of the healthcare organization
-    - HCO_Address1: Street address of the organization
+    **Part 2 - Parent/Owning Healthcare Organization Details:**
+    Search for the PARENT organization, corporate owner, or health system that owns or operates "{hco_name}".
+    Look for terms like "owned by", "operated by", "part of", "subsidiary of", "member of", "division of", or "affiliated with [health system name]".
+    
+    - HCO_ID: The NPI number of the parent organization (10 digits), or "N/A" if not found
+    - HCO_Name: Name of the parent healthcare system, hospital network, or corporate owner (e.g., "HCA Healthcare", "CommonSpirit Health", "Ascension")
+    - HCO_Address1: Headquarters or main address of the parent organization
     - HCO_City: City in ALL CAPS
     - HCO_State: 2-letter state code
     - HCO_ZIP: 5-digit zipcode
 
     **Search Tips:**
+    - Search "{hco_name} owned by" or "{hco_name} parent company" or "{hco_name} health system"
+    - Check the organization's website "About Us" page for parent company info
+    - If the organization IS the parent (no parent exists), return "N/A" for all HCO fields
     - Return actual found data, not "N/A" unless truly not findable
     """
 
@@ -961,8 +1041,11 @@ elif st.session_state.current_view == "enrichment_page":
         show_popup_without_button(popup_placeholder, st.session_state.popup_message_info['type'], st.session_state.popup_message_info) 
 
     if st.session_state.selected_hco_id and st.session_state.results_df is not None:
+        # Handle both ID and HCO_ID column names
+        id_col = "ID" if "ID" in st.session_state.results_df.columns else "HCO_ID"
+        selected_id_str = str(st.session_state.selected_hco_id)
         selected_record_df = st.session_state.results_df[
-            st.session_state.results_df["ID"] == st.session_state.selected_hco_id
+            st.session_state.results_df[id_col].astype(str) == selected_id_str
         ]
 
         # This function call now needs to be wrapped in an `if` to prevent re-rendering issues
