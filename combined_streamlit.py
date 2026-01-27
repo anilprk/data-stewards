@@ -322,6 +322,9 @@ def render_main_page(session):
         elif option == "HCO Data Steward":
             st.session_state.app_variant = "HCO"
 
+        # Rerun the app to reflect the variant selection
+        st.rerun()
+
     
     st.html("<style> .main {overflow: hidden}</style>")
     with st.sidebar:
