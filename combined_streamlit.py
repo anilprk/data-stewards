@@ -706,3 +706,8 @@ if "selected_hcp_id" not in st.session_state:
 if "primary_hco_data" not in st.session_state:
     st.session_state.primary_hco_data = None
 
+session = get_snowflake_session()
+
+# Page Router
+if st.session_state.current_view == "main":
+    render_main_page(session)
