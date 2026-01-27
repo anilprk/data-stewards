@@ -305,7 +305,7 @@ def render_main_page(session):
     title, app_variant_selection = st.columns(2)
     
     with title:
-        st.header("🤖 Data Stewardship Assistant")
+        st.header(f"🤖 {st.session_state.app_variant} Data Stewardship Assistant")
     with app_variant_selection:
         # Select App Type
         option = st.selectbox(
@@ -321,8 +321,6 @@ def render_main_page(session):
         elif option == "HCO Data Steward":
             st.session_state.app_variant = "HCO"
 
-        # Debug Statement
-        st.write(f"DEBUG: Selected App Variant - {st.session_state.app_variant}")
     
     st.html("<style> .main {overflow: hidden}</style>")
     with st.sidebar:
