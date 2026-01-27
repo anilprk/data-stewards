@@ -302,7 +302,28 @@ Only return the JSON object, no other text. Use the exact keys provided for each
 
 # Pages Rendering
 def render_main_page(session):
-    st.header("🤖 Data Stewardship Assistant")
+    title, app_variant_selection = st.columns(2)
+    
+    with title:
+        st.header("🤖 Data Stewardship Assistant")
+    with app_variant_selection:
+        # Select App Type
+        option = st.selectbox(
+            "Select App Type",
+            ("HCP Data Steward", "HCO Data Steward"),
+            index=None,
+            placeholder="Select app type...",
+        )
+
+        # Set app_variant based on selection
+        if option == "HCP Data Steward":
+            st.session_state.app_variant = "HCP"
+        elif option == "HCO Data Steward":
+            st.session_state.app_variant = "HCO"
+
+        # Debug Statement
+        st.write(f"DEBUG: Selected App Variant - {st.session_state.app_variant}")
+    
     st.html("<style> .main {overflow: hidden}</style>")
     with st.sidebar:
         st.subheader("About this App")
@@ -536,21 +557,6 @@ def render_main_page(session):
                 st.session_state.current_view = "enrichment_page"
                 st.rerun()
 
-    # Select App Type
-    option = st.selectbox(
-        "Select App Type",
-        ("HCP Data Steward", "HCO Data Steward"),
-        index=None,
-        placeholder="Select app type...",
-    )
-    
-    # Set app_variant based on selection
-    if option == "HCP Data Steward":
-        st.session_state.app_variant = "HCP"
-    elif option == "HCO Data Steward":
-        st.session_state.app_variant = "HCO"
-
-    st.write(f"DEBUG: Selected App Variant - {st.session_state.app_variant}")
 
     if st.session_state.app_variant is not None:
         pass
