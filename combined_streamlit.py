@@ -304,8 +304,9 @@ Only return the JSON object, no other text. Use the exact keys provided for each
 def render_main_page(session):
     title, app_variant_selection = st.columns(2)
     
+    title_prefix = "" if st.session_state.app_variant is None else st.session_state.app_variant
     with title:
-        st.header(f"🤖 {st.session_state.app_variant} Data Stewardship Assistant")
+        st.header(f"🤖 {title_prefix} Data Stewardship Assistant")
     with app_variant_selection:
         # Select App Type
         option = st.selectbox(
