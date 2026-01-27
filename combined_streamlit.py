@@ -553,6 +553,7 @@ def render_main_page(session):
     st.write(f"DEBUG: Selected App Variant - {st.session_state.app_variant}")
 
     if st.session_state.app_variant is not None:
+        pass
         # # Search Input (HCP/HCO) (based on app_variant)
         # freeze_container = st.container(border=True)
         # with freeze_container:
