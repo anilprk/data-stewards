@@ -550,7 +550,7 @@ def render_main_page(session):
     elif option == "HCO Data Steward":
         st.session_state.app_variant = "HCO"
 
-    if st.session_state.app_variant:
+    if st.session_state.app_variant is not None:
         # Search Input (HCP/HCO) (based on app_variant)
         freeze_container = st.container(border=True)
         with freeze_container:
