@@ -868,7 +868,7 @@ def render_enrichment_page(session, selected_hcp_df):
     with st.expander(provider_info_title, expanded=st.session_state.demographic_expander_state): 
         
         header_cols = st.columns([2, 2, 2, 1.5, 2.5, 1])
-        headers = ["Field", "Current", "Proposed", "Confidence", "Sources", "Approve"]
+        headers = ["Field", "Current", "Proposed", "Approve"]
         for column_obj, header_name in zip(header_cols, headers):
             column_obj.markdown(f'<div class="report-header">{header_name}</div>', unsafe_allow_html=True)
         
@@ -911,8 +911,6 @@ def render_enrichment_page(session, selected_hcp_df):
             else:
                 row_cols[2].markdown(f'<div class="cell-content report-proposed-column">{proposed_val}</div>', unsafe_allow_html=True)
             
-            row_cols[3].markdown(f'<div class="cell-content">{score_percent}</div>', unsafe_allow_html=True)
-            row_cols[4].markdown(f'<div class="cell-content">{source_display.replace(", ", "<br>")}</div>', unsafe_allow_html=True)
             with row_cols[5]:
                 st.markdown('<div class="cell-content checkbox-container">', unsafe_allow_html=True)
                 st.checkbox("", key=f"approve_{selected_id}_{col_name}", label_visibility="collapsed")
