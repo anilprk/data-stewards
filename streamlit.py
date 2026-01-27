@@ -810,7 +810,17 @@ def render_enrichment_page(session, selected_hcp_df):
         
         # Try different key names for affiliation data
         affiliation_data = api_response.get('hcp_affiliation_data', api_response.get('hco_affiliation_data', []))
-        proposed_hcp_affiliation_data_df = pd.DataFrame(affiliation_data)
+        # Handle case where arrays have different lengths (e.g., NPI has 1 item, others have 2)
+        if isinstance(affiliation_data, dict):
+            # Find the max length among all arrays
+            max_len = max((len(v) if isinstance(v, list) else 1) for v in affiliation_data.values()) if affiliation_data else 0
+            # Pad shorter arrays with their first value or None
+            for key, val in affiliation_data.items():
+                if isinstance(val, list) and len(val) < max_len:
+                    # Pad with the first value if available, otherwise None
+                    pad_value = val[0] if val else None
+                    affiliation_data[key] = val + [pad_value] * (max_len - len(val))
+        proposed_hcp_affiliation_data_df = pd.DataFrame(affiliation_data) if affiliation_data else pd.DataFrame()
 
     try:
         if current_df.empty or proposed_hcp_data_df.empty:
