@@ -35,6 +35,73 @@ def get_snowflake_session():
     return Session.builder.configs(connection_parameters).create()
 
 
+def check_affiliation_exists(session, hco_id: str, outlet_id) -> bool:
+    """Check if an affiliation record already exists in OUTLET_HCO_AFFILIATION table."""
+    try:
+        query = f"SELECT COUNT(*) AS CNT FROM OUTLET_HCO_AFFILIATION WHERE HCO_ID = '{hco_id}' AND OUTLET_ID = '{outlet_id}'"
+        result = session.sql(query).collect()
+        return result[0].CNT > 0
+    except Exception:
+        return False
+
+
+def insert_affiliation_record(session, hco_id: str, outlet_data: dict, generate_new_id: bool = False):
+    """
+    Insert a new affiliation record into OUTLET_HCO_AFFILIATION table.
+    
+    Args:
+        session: Snowflake session
+        hco_id: HCO ID value
+        outlet_data: Dictionary containing outlet/affiliation data
+        generate_new_id: If True, generate a new OUTLET_ID for AI-generated records
+        
+    Returns:
+        If generate_new_id is True: Returns the new OUTLET_ID (int) on success, None on failure
+        If generate_new_id is False: Returns True on success, False on failure
+    """
+    try:
+        outlet_id = outlet_data.get('HCO ID', outlet_data.get('OUTLET_ID', ''))
+        
+        # For AI-generated records, generate a new OUTLET_ID
+        if generate_new_id or str(outlet_id).startswith('ai_generated_') or not outlet_id:
+            max_id_result = session.sql("SELECT COALESCE(MAX(OUTLET_ID), 0) AS MAX_ID FROM OUTLET_HCO_AFFILIATION").collect()
+            max_id = max_id_result[0].MAX_ID if max_id_result[0].MAX_ID else 0
+            outlet_id = int(max_id) + 1
+        
+        outlet_name = outlet_data.get('HCO NAME', outlet_data.get('OUTLET_NAME', ''))
+        outlet_address1 = outlet_data.get('HCO ADDRESS', outlet_data.get('OUTLET_ADDRESS1', ''))
+        outlet_city = outlet_data.get('HCO CITY', outlet_data.get('OUTLET_CITY', ''))
+        outlet_state = outlet_data.get('HCO STATE', outlet_data.get('OUTLET_STATE', ''))
+        outlet_zip = outlet_data.get('HCO ZIP', outlet_data.get('OUTLET_ZIP', ''))
+        
+        # Clean values - escape single quotes
+        def clean_val(val):
+            if val is None:
+                return ''
+            return str(val).replace("'", "''")
+        
+        insert_sql = f"""
+            INSERT INTO OUTLET_HCO_AFFILIATION (HCO_ID, OUTLET_ID, OUTLET_NAME, OUTLET_ADDRESS1, OUTLET_CITY, OUTLET_STATE, OUTLET_ZIP)
+            VALUES (
+                '{clean_val(hco_id)}',
+                {outlet_id},
+                '{clean_val(outlet_name)}',
+                '{clean_val(outlet_address1)}',
+                '{clean_val(outlet_city)}',
+                '{clean_val(outlet_state)}',
+                '{clean_val(outlet_zip)}'
+            )
+        """
+        session.sql(insert_sql).collect()
+        
+        if generate_new_id or str(outlet_data.get('HCO ID', outlet_data.get('OUTLET_ID', ''))).startswith('ai_generated_'):
+            return outlet_id  # Return the new ID for AI-generated records
+        return True
+    except Exception as e:
+        st.error(f"Error inserting affiliation record: {e}")
+        return None if generate_new_id else False
+
+
 def get_affiliation_priorities_from_llm(session, selected_hco_data: dict, affiliations: list) -> dict:
     """
     Calls Snowflake Cortex REST API with structured JSON output to rank HCO affiliations by priority.
@@ -477,57 +544,129 @@ def render_enrichment_page(session, selected_hco_df):
     
     # Check for primary update confirmation dialog
     if st.session_state.get('show_primary_confirm_dialog'):
+        # Check if this is a new HCO from bypass flow
+        is_new_hco = st.session_state.selected_hco_id == 'empty_record'
+        
         with dialog_placeholder.container():
-            st.warning("Are you sure you want to change the primary affiliation? This will update the main record.", icon="⚠️")
+            # Different warning text based on whether this is a new HCO
+            if is_new_hco:
+                st.warning(
+                    "This is a new HCO record. Setting primary affiliation will:\n"
+                    "1. Create a new affiliation record in OUTLET_HCO_AFFILIATION table\n"
+                    "2. Set this as the primary affiliation in the HCO table",
+                    icon="⚠️"
+                )
+            else:
+                st.warning("Are you sure you want to change the primary affiliation? This will update the main record.", icon="⚠️")
             
             # --- MODIFIED: Display primary affiliation change in a vertical table ---
-            current_primary_id = selected_record.get("PRIMARY_AFFL_HCO_ACCOUNT_ID")
-            current_primary_name_query = session.sql(f"SELECT HCO_NAME FROM HCP_HCO_AFFILIATION WHERE HCO_ID = '{current_primary_id}'").collect() if current_primary_id else None
-            current_primary_name = current_primary_name_query[0].HCO_NAME if current_primary_name_query and not current_primary_name_query[0].HCO_NAME is None else "N/A"
+            current_primary_id = selected_record.get("PRIMARY_AFFL_ACCOUNT_ID")
+            current_primary_name_query = session.sql(f"SELECT OUTLET_NAME FROM OUTLET_HCO_AFFILIATION WHERE OUTLET_ID = '{current_primary_id}'").collect() if current_primary_id else None
+            current_primary_name = current_primary_name_query[0].OUTLET_NAME if current_primary_name_query and current_primary_name_query[0].OUTLET_NAME is not None else "N/A"
             
             new_primary_id = st.session_state.primary_hco_id
-            new_primary_name_query = session.sql(f"SELECT HCO_NAME FROM HCP_HCO_AFFILIATION WHERE HCO_ID = '{new_primary_id}'").collect() if new_primary_id else None
-            new_primary_name = new_primary_name_query[0].HCO_NAME if new_primary_name_query and not new_primary_name_query[0].HCO_NAME is None else "N/A"
+            # Get HCO data from session state (stored when "Set as Primary" was clicked)
+            new_outlet_data = st.session_state.get('primary_hco_data', {})
+            new_primary_name = new_outlet_data.get('HCO NAME', new_outlet_data.get('OUTLET_NAME', 'N/A'))
+            
+            # Check if this is AI-generated (will need a new ID)
+            is_ai_generated = (str(new_primary_id).startswith('ai_generated_') or 
+                               new_outlet_data.get('SOURCE') == 'Generated by AI' or
+                               new_outlet_data.get('SOURCE', '').lower() == 'generated by ai')
+            
+            # For AI-generated, show that a new ID will be created
+            if is_ai_generated:
+                proposed_display = f"NEW ID (will be generated) - {new_primary_name}"
+            else:
+                proposed_display = f"ID: {new_primary_id} ({new_primary_name})"
 
             primary_change_df = pd.DataFrame({
-                "Field": ["ID", "Name", "Current Primary HCO", "Proposed Primary HCO"],
+                "Field": ["ID", "Name", "Current Primary Affiliation", "Proposed Primary Affiliation"],
                 "Value": [
                     get_val(selected_record, 'ID'),
                     get_val(selected_record, 'NAME'),
-                    f"ID: {current_primary_id} ({current_primary_name})",
-                    f"ID: {new_primary_id} ({new_primary_name})"
+                    f"ID: {current_primary_id} ({current_primary_name})" if current_primary_id else "None",
+                    proposed_display
                 ]
             })
+            
+            if is_new_hco or is_ai_generated:
+                # Add row indicating new affiliation will be created
+                new_row = pd.DataFrame({"Field": ["New Affiliation Record"], "Value": ["Will be created in OUTLET_HCO_AFFILIATION table with auto-generated ID"]})
+                primary_change_df = pd.concat([primary_change_df, new_row], ignore_index=True)
+            
             st.dataframe(primary_change_df.set_index('Field'), use_container_width=True)
             # --- END MODIFIED ---
 
             col1, col2 = st.columns([1, 1])
+            
+            # Different button text based on action
+            if is_new_hco or is_ai_generated:
+                confirm_btn_text = "Yes, Create Affiliation & Set Primary"
+            else:
+                confirm_btn_text = "Yes, Set Primary"
+            
             with col1:
-                if st.button("Yes, Set Primary", key="confirm_primary_yes"):
+                if st.button(confirm_btn_text, key="confirm_primary_yes"):
                     new_primary_id = st.session_state.primary_hco_id
                     selected_id = st.session_state.selected_hco_id
                     
-                    with st.spinner("Updating primary affiliation in Snowflake..."):
+                    # Check if this is an AI-generated affiliation (needs to be inserted first)
+                    is_ai_generated = (str(new_primary_id).startswith('ai_generated_') or 
+                                      new_outlet_data.get('SOURCE') == 'Generated by AI' or
+                                      new_outlet_data.get('SOURCE', '').lower() == 'generated by ai')
+                    
+                    spinner_text = "Creating affiliation and setting primary..." if (is_new_hco or is_ai_generated) else "Updating primary affiliation in Snowflake..."
+                    with st.spinner(spinner_text):
                         try:
-                            npi_table = session.table("NPI")
-                            update_assignments = {"PRIMARY_AFFL_HCO_ACCOUNT_ID": new_primary_id}
-                            update_result = npi_table.update(update_assignments, col("ID") == selected_id)
-                            if update_result.rows_updated > 0:
-                                st.session_state.show_popup = True
-                                st.session_state.popup_message_info = { 'type': 'primary_success', 'hco_id': new_primary_id }
-                                st.session_state.show_primary_confirm_dialog = False
-                                st.rerun()
-                            else:
-                                st.warning("Could not find the main HCP record to update.")
-                                st.session_state.show_primary_confirm_dialog = False
-                                st.rerun()
+                            success = True
+                            final_outlet_id = new_primary_id  # Will be updated if AI-generated
+                            
+                            # For AI-generated affiliation (new or existing HCO), first insert the affiliation record
+                            if is_ai_generated and new_outlet_data:
+                                # Insert and get the new OUTLET_ID
+                                result = insert_affiliation_record(session, selected_id, new_outlet_data, generate_new_id=True)
+                                if result is not None:
+                                    final_outlet_id = result  # Use the newly generated ID
+                                    st.toast(f"✅ Affiliation record created with OUTLET ID: {final_outlet_id}", icon="✅")
+                                else:
+                                    success = False
+                                    st.error("Failed to create affiliation record.")
+                            elif is_new_hco and new_outlet_data:
+                                # For new HCO with existing affiliation (not AI-generated)
+                                if not check_affiliation_exists(session, selected_id, new_primary_id):
+                                    insert_success = insert_affiliation_record(session, selected_id, new_outlet_data)
+                                    if insert_success:
+                                        st.toast("✅ Affiliation record created successfully!", icon="✅")
+                                    else:
+                                        success = False
+                                else:
+                                    st.info("Affiliation record already exists.")
+                            
+                            # Now update the primary affiliation in HCO table with the final OUTLET ID
+                            if success:
+                                hco_table = session.table("HCO")
+                                update_assignments = {"PRIMARY_AFFL_ACCOUNT_ID": final_outlet_id}
+                                update_result = hco_table.update(update_assignments, col("ID") == selected_id)
+                                if update_result.rows_updated > 0:
+                                    st.session_state.show_popup = True
+                                    st.session_state.popup_message_info = { 'type': 'primary_success', 'hco_id': final_outlet_id }
+                                    st.session_state.show_primary_confirm_dialog = False
+                                    st.session_state.primary_hco_data = None  # Clear stored data
+                                    st.rerun()
+                                else:
+                                    st.warning("Could not find the main HCO record to update. Please ensure the record was inserted first.")
+                                    st.session_state.show_primary_confirm_dialog = False
+                                    st.rerun()
                         except Exception as e:
                             st.error(f"An error occurred during the update: {e}")
+                            import traceback
+                            st.code(traceback.format_exc())
                             st.session_state.show_primary_confirm_dialog = False
-                            st.rerun()
             with col2:
                 if st.button("Cancel", key="confirm_primary_cancel"):
                     st.session_state.show_primary_confirm_dialog = False
+                    st.session_state.primary_hco_data = None  # Clear stored data
                     st.rerun()
         return
     #end of Placeholder for a potential dialog to display over the main content
@@ -536,8 +675,28 @@ def render_enrichment_page(session, selected_hco_df):
         # Get user's search query for web search flow (when no record exists in DB)
         user_search_query = st.session_state.get('web_search_query', None)
         api_response = get_enriched_data_from_api(session, selected_hco_df, search_query=user_search_query)
-        proposed_hcp_data_df = pd.DataFrame(api_response['hco_data'])
-        proposed_hcp_affiliation_data_df = pd.DataFrame(api_response['hco_affiliation_data'])
+        
+        # Safely extract data with fallbacks
+        if not isinstance(api_response, dict):
+            st.error("API response is not a dictionary. Cannot proceed.")
+            st.stop()
+        
+        # Try different key names for HCO data
+        hco_data = api_response.get('hco_data', api_response.get('hcp_data', []))
+        proposed_hcp_data_df = pd.DataFrame(hco_data)
+        
+        # Try different key names for affiliation data
+        affiliation_data = api_response.get('hco_affiliation_data', api_response.get('hcp_affiliation_data', []))
+        # Handle case where arrays have different lengths
+        if isinstance(affiliation_data, dict):
+            # Find the max length among all arrays
+            max_len = max((len(v) if isinstance(v, list) else 1) for v in affiliation_data.values()) if affiliation_data else 0
+            # Pad shorter arrays with their first value or None
+            for key, val in affiliation_data.items():
+                if isinstance(val, list) and len(val) < max_len:
+                    pad_value = val[0] if val else None
+                    affiliation_data[key] = val + [pad_value] * (max_len - len(val))
+        proposed_hcp_affiliation_data_df = pd.DataFrame(affiliation_data) if affiliation_data else pd.DataFrame()
 
     try:
         if current_df.empty or proposed_hcp_data_df.empty:
@@ -682,17 +841,30 @@ def render_enrichment_page(session, selected_hco_df):
 
         # Build ai_found_hcos from proposed_hcp_affiliation_data_df
         ai_found_hcos = []
+        # Get HCO name to filter out affiliations that match the HCO's own name
+        hco_name_current = current_record.get('Name', current_record.get('NAME', '')).upper().strip()
+        hco_name_parts = [p.strip() for p in hco_name_current.replace(',', ' ').replace('.', ' ').split() if len(p.strip()) > 2]
 
         if not proposed_hcp_affiliation_data_df.empty:
             for index, row in proposed_hcp_affiliation_data_df.iterrows():
                 hco_name = row.get('HCO_Name')
                 if pd.notna(hco_name) and str(hco_name).strip() != "":
-                    ai_found_hcos.append({
-                        "HCO ID": row.get('HCO_ID'),
-                        "HCO NAME": hco_name, "HCO NPI": row.get('NPI'),
-                        "HCO ADDRESS": row.get('HCO_Address1', ''),
-                        "HCO CITY": row.get('HCO_City', ''), "HCO STATE": row.get('HCO_State', ''), "HCO ZIP": row.get('HCO_ZIP', ''),
-                    })
+                    hco_name_upper = str(hco_name).upper().strip()
+                    
+                    # Skip if affiliation name contains the HCO's own name
+                    is_own_name = False
+                    if hco_name_parts:
+                        matching_parts = sum(1 for part in hco_name_parts if part in hco_name_upper)
+                        if matching_parts >= len(hco_name_parts) / 2:
+                            is_own_name = True
+                    
+                    if not is_own_name:
+                        ai_found_hcos.append({
+                            "HCO ID": row.get('HCO_ID'),
+                            "HCO NAME": hco_name, "HCO NPI": row.get('NPI'),
+                            "HCO ADDRESS": row.get('HCO_Address1', ''),
+                            "HCO CITY": row.get('HCO_City', ''), "HCO STATE": row.get('HCO_State', ''), "HCO ZIP": row.get('HCO_ZIP', ''),
+                        })
 
         all_affiliations = {}
         if not db_affiliations_df.empty:
@@ -789,13 +961,20 @@ def render_enrichment_page(session, selected_hco_df):
                 except (ValueError, TypeError):
                     pass
                 
+                # Check if this is a new HCO from bypass flow
+                is_new_hco = st.session_state.selected_hco_id == 'empty_record'
+                
                 with row_cols[0]:
                     if is_primary:
                         st.markdown("✅ **Primary**")
                     else:
-                        if st.button("Set as Primary", key=f"set_primary_{hco_id}"):
+                        # Different button text for new HCO
+                        btn_text = "Add & Set Primary" if is_new_hco else "Set as Primary"
+                        if st.button(btn_text, key=f"set_primary_{hco_id}"):
                             st.session_state.show_primary_confirm_dialog = True
                             st.session_state.primary_hco_id = hco_id
+                            # Store the full HCO data for insertion (needed for bypass flow and AI-generated)
+                            st.session_state.primary_hco_data = hco_data
                             st.rerun()
                 
                 source = hco_data.get("SOURCE", "")
