@@ -389,18 +389,17 @@ def render_enrichment_page(session, selected_hco_df):
                 remaining_df = pd.DataFrame(remaining_details_to_display, columns=["Field", "Value"])
                 st.dataframe(remaining_df, hide_index=True, use_container_width=True)
 
-        if not is_new_record:    
-            st.markdown("---")
-            # --- END MODIFIED ---
-        else:
-            # Use st.columns for horizontal buttons
+            if not is_new_record:    
+                st.markdown("---")
+            
+            # Use st.columns for horizontal buttons - INSIDE the container
             col1, col2 = st.columns([1, 1])
             confirm_btn_label = "Yes, Insert" if is_new_record else "Yes, Update"
             with col1:
                 if st.button(confirm_btn_label, key="confirm_yes"):
                     approved_df_cols = st.session_state.get('approved_cols', [])
                     selected_id = st.session_state.selected_hco_id
-                    
+                                        
                     if not approved_df_cols:
                         st.info("No fields were selected. Please go back and select fields.")
                         st.session_state.show_confirm_dialog = False
@@ -416,6 +415,7 @@ def render_enrichment_page(session, selected_hco_df):
                                 assignments = {}
                                 proposed_record = st.session_state.proposed_record
                                 columns_list = []
+                                                                
                                 for col_name in approved_df_cols:
                                     db_col_name = db_column_map.get(col_name)
                                     if db_col_name:
@@ -428,20 +428,29 @@ def render_enrichment_page(session, selected_hco_df):
                                 target_table = session.table(f'"{DATABASE}"."{SCHEMA}"."{YOUR_TABLE_NAME}"')
                                 
                                 if is_new_record:
+                                    # Get max ID and add 1 for new record
+                                    # HCO table uses string IDs in format 'SHA_000006494'
+                                    max_id_result = session.sql(f'SELECT MAX(CAST(REPLACE(ID, \'SHA_\', \'\') AS INT)) AS MAX_NUM FROM "{DATABASE}"."{SCHEMA}"."{YOUR_TABLE_NAME}" WHERE ID LIKE \'SHA_%\'').collect()
+                                    max_num = max_id_result[0].MAX_NUM if max_id_result[0].MAX_NUM else 0
+                                    new_num = int(max_num) + 1
+                                    new_id = f"SHA_{new_num:09d}"  # Format as SHA_000000001                                    
+                                    # Add ID to columns and assignments
+                                    columns_list.insert(0, "ID")
+                                    assignments["ID"] = new_id
+                                    
                                     # INSERT new record using SQL
                                     col_names = ", ".join(columns_list)
                                     col_values = ", ".join([f"'{str(assignments[c])}'" if assignments[c] is not None else "NULL" for c in columns_list])
                                     insert_sql = f'INSERT INTO "{DATABASE}"."{SCHEMA}"."{YOUR_TABLE_NAME}" ({col_names}) VALUES ({col_values})'
                                     session.sql(insert_sql).collect()
+                                    st.write("DEBUG: INSERT executed successfully")
                                     cols_str = ", ".join(columns_list)
-                                    custom_message = f"New record inserted successfully. Columns: {cols_str}."
+                                    custom_message = f"New record inserted successfully with ID: {new_id}. Columns: {cols_str}."
                                     st.session_state.show_popup = True
-                                    st.session_state.popup_message_info = { 'type': 'insert_success', 'id': 'NEW', 'message': custom_message }
+                                    st.session_state.popup_message_info = { 'type': 'insert_success', 'id': new_id, 'message': custom_message }
                                 else:
                                     # UPDATE existing record
-                                    st.write(f"DEBUG: Updating ID={selected_id}, assignments={assignments}")
                                     update_result = target_table.update(assignments, col("ID") == selected_id)
-                                    st.write(f"DEBUG: update_result={update_result}")
                                     if update_result.rows_updated > 0:
                                         cols_str = ", ".join(columns_list)
                                         custom_message = f"Record for ID: {selected_id} updated successfully. Changed columns: {cols_str}."
@@ -453,8 +462,10 @@ def render_enrichment_page(session, selected_hco_df):
                                         st.rerun()
                             except Exception as e:
                                 st.error(f"An error occurred: {e}")
+                                import traceback
+                                st.code(traceback.format_exc())
                                 st.session_state.show_confirm_dialog = False
-                                st.rerun()
+                                st.stop()  # Stop instead of rerun to see the error
                                 
                             st.session_state.show_confirm_dialog = False
                             st.rerun()
