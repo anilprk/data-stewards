@@ -304,8 +304,8 @@ Only return the JSON object, no other text. Use the exact keys provided for each
 def render_main_page(session):
     title, app_variant_selection = st.columns(2)
     
-    title_prefix = "" if st.session_state.app_variant is None else st.session_state.app_variant
     with title:
+        title_prefix = "" if st.session_state.app_variant is None else st.session_state.app_variant
         st.header(f"🤖 {title_prefix} Data Stewardship Assistant")
     with app_variant_selection:
         # Select App Type
@@ -342,7 +342,7 @@ def render_main_page(session):
     DATABASE = "CORTEX_ANALYST_HCK"
     SCHEMA = "PUBLIC"
     STAGE = "HACKATHON"
-    FILE = "HCO_MODEL.yaml"
+    FILE = "HCK_MODEL.yaml" if st.session_state.app_variant == "HCP" else "HCO_MODEL.yaml"
 
     def send_message(prompt: str) -> dict:
         """
@@ -560,143 +560,141 @@ def render_main_page(session):
                 st.rerun()
 
 
-    if st.session_state.app_variant is not None:
-        pass
-        # # Search Input (HCP/HCO) (based on app_variant)
-        # freeze_container = st.container(border=True)
-        # with freeze_container:
-        #     user_input_text = st.chat_input(f"Search for an {st.session_state.app_variant} Account")
-        #     current_prompt = user_input_text
+    # Search Input (HCP/HCO) (based on app_variant)
+    freeze_container = st.container(border=True)
+    with freeze_container:
+        user_input_text = st.chat_input(f"Search for an {st.session_state.app_variant} Account")
+        current_prompt = user_input_text
 
-        #     if current_prompt and current_prompt != st.session_state.get("last_prompt"):
-        #         process_message(prompt=current_prompt)
-        #         st.session_state.last_prompt = current_prompt
+        if current_prompt and current_prompt != st.session_state.get("last_prompt"):
+            process_message(prompt=current_prompt)
+            st.session_state.last_prompt = current_prompt
 
-        # # --- DISPLAY LOGIC (Vertical Flow) ---
-        # if st.session_state.messages:
-        # assistant_messages = [msg for msg in st.session_state.messages if msg["role"] == "assistant"]
-        # if assistant_messages:
-        #     st.markdown("---")
-        #     display_interpretation(content=assistant_messages[-1]["content"])
+    # --- DISPLAY LOGIC (Vertical Flow) ---
+    if st.session_state.messages:
+    assistant_messages = [msg for msg in st.session_state.messages if msg["role"] == "assistant"]
+    if assistant_messages:
+        st.markdown("---")
+        display_interpretation(content=assistant_messages[-1]["content"])
 
-        #     # 1. Search Results Table (Full Width)
-        #     response_container = st.container(border=True)
-        #     with response_container:
-        #         st.subheader("Search Results")
-        #         display_results_table(content=assistant_messages[-1]["content"])
+        # 1. Search Results Table (Full Width)
+        response_container = st.container(border=True)
+        with response_container:
+            st.subheader("Search Results")
+            display_results_table(content=assistant_messages[-1]["content"])
 
-        #     # Helper to safely get and format value (handles both column naming conventions)
-        #     def get_safe_value(record, key):
-        #         # Try original key first, then with HCO_ prefix
-        #         value = record.get(key)
-        #         if value is None or (isinstance(value, float) and pd.isna(value)):
-        #             value = record.get(f"HCO_{key}")
-        #         return str(value) if pd.notna(value) and value is not None else 'N/A'
+        # Helper to safely get and format value (handles both column naming conventions)
+        def get_safe_value(record, key):
+            # Try original key first, then with HCO_ prefix
+            value = record.get(key)
+            if value is None or (isinstance(value, float) and pd.isna(value)):
+                value = record.get(f"HCO_{key}")
+            return str(value) if pd.notna(value) and value is not None else 'N/A'
+        
+
+        # 2. Selected Record Details (Only appears when selected_hco_id is set)
+        if st.session_state.get("selected_hco_id") and st.session_state.get("results_df") is not None:
+            # Handle both ID and HCO_ID column names
+            id_col = "ID" if "ID" in st.session_state.results_df.columns else "HCO_ID"
+            # Convert both to string for comparison to avoid type mismatch
+            selected_id_str = str(st.session_state.selected_hco_id)
+            selected_record_df = st.session_state.results_df[
+                st.session_state.results_df[id_col].astype(str) == selected_id_str
+            ]
+
             
-
-        #     # 2. Selected Record Details (Only appears when selected_hco_id is set)
-        #     if st.session_state.get("selected_hco_id") and st.session_state.get("results_df") is not None:
-        #         # Handle both ID and HCO_ID column names
-        #         id_col = "ID" if "ID" in st.session_state.results_df.columns else "HCO_ID"
-        #         # Convert both to string for comparison to avoid type mismatch
-        #         selected_id_str = str(st.session_state.selected_hco_id)
-        #         selected_record_df = st.session_state.results_df[
-        #             st.session_state.results_df[id_col].astype(str) == selected_id_str
-        #         ]
-
+            if not selected_record_df.empty:
                 
-        #         if not selected_record_df.empty:
+                selected_record = selected_record_df.iloc[0]
+                
+                # --- Start Two-Column Layout for Details Sections (Side-by-Side Below Search) ---
+                details_col_left, details_col_right = st.columns(2)
+                
+                # --- Left Detail Column: Current Demographic Details ---
+                with details_col_left:
+                    st.subheader("Current HCO Address Details")
                     
-        #             selected_record = selected_record_df.iloc[0]
-                    
-        #             # --- Start Two-Column Layout for Details Sections (Side-by-Side Below Search) ---
-        #             details_col_left, details_col_right = st.columns(2)
-                    
-        #             # --- Left Detail Column: Current Demographic Details ---
-        #             with details_col_left:
-        #                 st.subheader("Current HCO Address Details")
+                    # This border container holds the custom 2x2 layout
+                    with st.container(border=True):
                         
-        #                 # This border container holds the custom 2x2 layout
-        #                 with st.container(border=True):
-                            
-        #                     # ID and Name in the required structure (single line)
-        #                     hcp_id = get_safe_value(selected_record, 'ID') if 'ID' in selected_record.index else get_safe_value(selected_record, 'HCO_ID')
-        #                     hcp_name = get_safe_value(selected_record, 'NAME') if 'NAME' in selected_record.index else get_safe_value(selected_record, 'HCO_NAME')
-        #                     st.markdown(f'**ID:** {hcp_id} - {hcp_name}', unsafe_allow_html=True)
-                            
-        #                     st.markdown("<hr style='margin-top: 0; margin-bottom: 0; border-top: 1px solid #ccc;'>", unsafe_allow_html=True)
+                        # ID and Name in the required structure (single line)
+                        hcp_id = get_safe_value(selected_record, 'ID') if 'ID' in selected_record.index else get_safe_value(selected_record, 'HCO_ID')
+                        hcp_name = get_safe_value(selected_record, 'NAME') if 'NAME' in selected_record.index else get_safe_value(selected_record, 'HCO_NAME')
+                        st.markdown(f'**ID:** {hcp_id} - {hcp_name}', unsafe_allow_html=True)
+                        
+                        st.markdown("<hr style='margin-top: 0; margin-bottom: 0; border-top: 1px solid #ccc;'>", unsafe_allow_html=True)
 
-        #                     # Define the fields for the new two-column layout
-        #                     left_fields = [                                
-        #                         ("Address Line 1", "ADDRESS1"),
-        #                         ("Address Line 2", "ADDRESS2"),
-        #                         ("City", "CITY"),]
-        #                     right_fields = [
-        #                         ("State", "STATE"),
-        #                         ("ZIP", "ZIP"),
-        #                         ("Country", "COUNTRY")
-        #                     ]
+                        # Define the fields for the new two-column layout
+                        left_fields = [                                
+                            ("Address Line 1", "ADDRESS1"),
+                            ("Address Line 2", "ADDRESS2"),
+                            ("City", "CITY"),]
+                        right_fields = [
+                            ("State", "STATE"),
+                            ("ZIP", "ZIP"),
+                            ("Country", "COUNTRY")
+                        ]
 
-        #                     # Create two internal columns for the key-value pairs
-        #                     left_col_address, right_col_address = st.columns(2)
+                        # Create two internal columns for the key-value pairs
+                        left_col_address, right_col_address = st.columns(2)
 
-        #                     # Render Identity Fields (Left Column)
-        #                     for label, key in left_fields:
-        #                         value = get_safe_value(selected_record, key)
-        #                         display_value = value if value and value.strip() else 'N/A'
-        #                         left_col_address.markdown(
-        #                             f'<div class="detail-key">{label}:</div>'
-        #                             f'<div class="detail-value">{display_value}</div>',
-        #                             unsafe_allow_html=True
-        #                         )
+                        # Render Identity Fields (Left Column)
+                        for label, key in left_fields:
+                            value = get_safe_value(selected_record, key)
+                            display_value = value if value and value.strip() else 'N/A'
+                            left_col_address.markdown(
+                                f'<div class="detail-key">{label}:</div>'
+                                f'<div class="detail-value">{display_value}</div>',
+                                unsafe_allow_html=True
+                            )
 
-        #                     # Render Address Fields
-        #                     for label, key in right_fields:
-        #                         value = get_safe_value(selected_record, key)
-        #                         display_value = value if value and value.strip() else 'N/A'
-        #                         right_col_address.markdown(
-        #                             f'<div class="detail-key">{label}:</div>'
-        #                             f'<div class="detail-value">{display_value}</div>',
-        #                             unsafe_allow_html=True
-        #                         )
+                        # Render Address Fields
+                        for label, key in right_fields:
+                            value = get_safe_value(selected_record, key)
+                            display_value = value if value and value.strip() else 'N/A'
+                            right_col_address.markdown(
+                                f'<div class="detail-key">{label}:</div>'
+                                f'<div class="detail-value">{display_value}</div>',
+                                unsafe_allow_html=True
+                            )
 
-        #             # --- Right Detail Column: Primary HCO Affiliation Details ---
-        #             with details_col_right:
-        #                 st.subheader("Primary HCO Affiliation Details")
-        #                 with st.container(border=True):
-        #                     hco_col1, hco_col2 = st.columns(2)
-        #                     primary_hco_id = selected_record.get("OUTLET_ID")
-                            
-        #                     hco_col1.markdown(f'<div class="detail-key">Parent ID:</div><div class="detail-value">{get_safe_value(selected_record, "OUTLET_ID")}</div>', unsafe_allow_html=True)
-                            
-        #                     hco_id_val = str(int(primary_hco_id)) if pd.notna(primary_hco_id) and primary_hco_id is not None else "N/A"
+                # --- Right Detail Column: Primary HCO Affiliation Details ---
+                with details_col_right:
+                    st.subheader("Primary HCO Affiliation Details")
+                    with st.container(border=True):
+                        hco_col1, hco_col2 = st.columns(2)
+                        primary_hco_id = selected_record.get("OUTLET_ID")
+                        
+                        hco_col1.markdown(f'<div class="detail-key">Parent ID:</div><div class="detail-value">{get_safe_value(selected_record, "OUTLET_ID")}</div>', unsafe_allow_html=True)
+                        
+                        hco_id_val = str(int(primary_hco_id)) if pd.notna(primary_hco_id) and primary_hco_id is not None else "N/A"
 
-        #                     hco_col2.markdown(f'<div class="detail-key">Parent HCO NPI:</div><div class="detail-value">{hco_id_val}</div>', unsafe_allow_html=True)
-                            
-        #                     hco_col1.markdown(f'<div class="detail-key">Parent Name:</div><div class="detail-value">{get_safe_value(selected_record, "OUTLET_NAME")}</div>', unsafe_allow_html=True)
-        #                     # Removed the line for "Primary HCO Name" as requested.
-                            
-                            
-        #             # --- End Two-Column Layout for Details Sections ---
-        #             st.divider()
-                    
-        #             # --- Enrich Button (Full Width, below the detail columns) ---
-        #             # -----------------------------------------------------------
-        #             # MODIFIED SECTION STARTS HERE
-        #             # -----------------------------------------------------------
-        #             # Create two columns, with a small width for the button
-        #             button_col, _ = st.columns([0.2, 0.8])
-                    
-        #             with button_col:
-        #                 if st.button("Enrich with AI Assistant 🚀", type="primary"):
-        #                     st.session_state.current_view = "enrichment_page"
-        #                     st.rerun()
-        #             # -----------------------------------------------------------
-        #             # MODIFIED SECTION ENDS HERE
-        #             # -----------------------------------------------------------
-                    
-        #         else:
-        #             st.info("No data found for selected record ID.")
+                        hco_col2.markdown(f'<div class="detail-key">Parent HCO NPI:</div><div class="detail-value">{hco_id_val}</div>', unsafe_allow_html=True)
+                        
+                        hco_col1.markdown(f'<div class="detail-key">Parent Name:</div><div class="detail-value">{get_safe_value(selected_record, "OUTLET_NAME")}</div>', unsafe_allow_html=True)
+                        # Removed the line for "Primary HCO Name" as requested.
+                        
+                        
+                # --- End Two-Column Layout for Details Sections ---
+                st.divider()
+                
+                # --- Enrich Button (Full Width, below the detail columns) ---
+                # -----------------------------------------------------------
+                # MODIFIED SECTION STARTS HERE
+                # -----------------------------------------------------------
+                # Create two columns, with a small width for the button
+                button_col, _ = st.columns([0.2, 0.8])
+                
+                with button_col:
+                    if st.button("Enrich with AI Assistant 🚀", type="primary"):
+                        st.session_state.current_view = "enrichment_page"
+                        st.rerun()
+                # -----------------------------------------------------------
+                # MODIFIED SECTION ENDS HERE
+                # -----------------------------------------------------------
+                
+            else:
+                st.info("No data found for selected record ID.")
     
 
 
