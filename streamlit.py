@@ -72,7 +72,7 @@ def insert_affiliation_record(session, hcp_id:str, hcp_npi: str, hco_data: dict,
         insert_sql = f"""
             INSERT INTO HCP_HCO_AFFILIATION (HCP_ACCT_ID, HCP_NPI, HCO_ID, HCO_NAME, HCO_ADDRESS1, HCO_CITY, HCO_STATE, HCO_ZIP)
             VALUES (
-                '{clean_val(hcp_id)}'
+                '{clean_val(hcp_id)}',
                 '{clean_val(hcp_npi)}',
                 {hco_id},
                 '{clean_val(hco_name)}',
@@ -760,7 +760,7 @@ def render_enrichment_page(session, selected_hcp_df):
                             elif is_new_hcp and new_hco_data:
                                 # For new HCP with existing HCO (not AI-generated)
                                 if not check_affiliation_exists(session, hcp_npi, new_primary_id):
-                                    success = insert_affiliation_record(session, hcp_npi, new_hco_data)
+                                    success = insert_affiliation_record(session, selected_id, hcp_npi, new_hco_data)
                                     if success:
                                         st.toast("✅ Affiliation record created successfully!", icon="✅")
                                 else:
