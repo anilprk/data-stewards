@@ -1192,7 +1192,8 @@ def render_main_page(session):
                             if is_selected:
                                 row_cols[0].write("🔘")
                             else:
-                                if row_cols[0].button("", key=f"select_{row_id}"):
+                                # Use index in key to ensure uniqueness even if row_id duplicates
+                                if row_cols[0].button("", key=f"select_{row_id}_{index}"):
                                     st.session_state.selected_hco_id = row_id
                                     st.rerun()
                             row_cols[1].write(row_id)
