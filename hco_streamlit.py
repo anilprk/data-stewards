@@ -1143,10 +1143,16 @@ def render_main_page(session):
                 name_filter = match.group(1)
         
         if name_filter:
-            # Build a new query - no join needed for search results display
+            # Build a new query with join but use subquery to get only first affiliation per HCO
             new_sql = f"""
-            SELECT h.ID, h.NAME, h.ADDRESS1, h.ADDRESS2, h.CITY, h.STATE, h.ZIP, h.COUNTRY
+            SELECT h.ID, h.NAME, h.ADDRESS1, h.ADDRESS2, h.CITY, h.STATE, h.ZIP, h.COUNTRY,
+                   o.OUTLET_ID, o.OUTLET_NAME, o.OUTLET_ADDRESS1, o.OUTLET_CITY, o.OUTLET_STATE, o.OUTLET_ZIP
             FROM CORTEX_ANALYST_HCK.PUBLIC.HCO h
+            LEFT OUTER JOIN (
+                SELECT HCO_ID, OUTLET_ID, OUTLET_NAME, OUTLET_ADDRESS1, OUTLET_CITY, OUTLET_STATE, OUTLET_ZIP,
+                       ROW_NUMBER() OVER (PARTITION BY HCO_ID ORDER BY OUTLET_ID) as rn
+                FROM CORTEX_ANALYST_HCK.PUBLIC.OUTLET_HCO_AFFILIATION
+            ) o ON h.ID = o.HCO_ID AND o.rn = 1
             WHERE h.NAME ILIKE '{name_filter}'
             ORDER BY h.NAME
             """
