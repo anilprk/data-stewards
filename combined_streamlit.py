@@ -536,10 +536,24 @@ def render_main_page(session):
                 st.session_state.current_view = "enrichment_page"
                 st.rerun()
 
-    # --- MAIN INPUT LOGIC ---
+    # Select App Type
+    option = st.selectbox(
+        "Select App Type",
+        ("HCP Data Steward", "HCO Data Steward"),
+        index=None,
+        placeholder="Select app type...",
+    )
+    
+    # Set app_variant based on selection
+    if option == "HCP Data Steward":
+        st.session_state.app_variant = "HCP"
+    elif option == "HCO Data Steward":
+        st.session_state.app_variant = "HCO"
+
+    # Search Input (HCP/HCO) (based on app_variant)
     freeze_container = st.container(border=True)
     with freeze_container:
-        user_input_text = st.chat_input("Search for an HCO Account")
+        user_input_text = st.chat_input(f"Search for an {st.session_state.app_variant} Account")
         current_prompt = user_input_text
 
         if current_prompt and current_prompt != st.session_state.get("last_prompt"):
