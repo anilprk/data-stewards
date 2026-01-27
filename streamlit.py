@@ -961,16 +961,30 @@ def render_enrichment_page(session, selected_hcp_df):
 
         # Build ai_found_hcos from proposed_hcp_affiliation_data_df
         ai_found_hcos = []
+        # Get HCP name to filter out affiliations that match the HCP's own name
+        hcp_name = current_record.get('Name', current_record.get('NAME', '')).upper().strip()
+        hcp_name_parts = [p.strip() for p in hcp_name.replace(',', ' ').replace('.', ' ').split() if len(p.strip()) > 2]
+        
         if not proposed_hcp_affiliation_data_df.empty:
             for index, row in proposed_hcp_affiliation_data_df.iterrows():
                 hco_name = row.get('HCO_Name')
                 if pd.notna(hco_name) and str(hco_name).strip() != "":
-                    ai_found_hcos.append({
-                        "HCO ID": row.get('HCO_ID'),
-                        "HCO NAME": hco_name, "HCO NPI": row.get('NPI'),
-                        "HCO ADDRESS": row.get('HCO_Address1', ''),
-                        "HCO CITY": row.get('HCO_City', ''), "HCO STATE": row.get('HCO_State', ''), "HCO ZIP": row.get('HCO_ZIP', ''),
-                    })
+                    hco_name_upper = str(hco_name).upper().strip()
+                    
+                    # Skip if HCO name contains the HCP's name (likely the HCP's own practice)
+                    is_hcp_own_practice = False
+                    if hcp_name_parts:
+                        matching_parts = sum(1 for part in hcp_name_parts if part in hco_name_upper)
+                        if matching_parts >= len(hcp_name_parts) / 2:
+                            is_hcp_own_practice = True
+                    
+                    if not is_hcp_own_practice:
+                        ai_found_hcos.append({
+                            "HCO ID": row.get('HCO_ID'),
+                            "HCO NAME": hco_name, "HCO NPI": row.get('NPI'),
+                            "HCO ADDRESS": row.get('HCO_Address1', ''),
+                            "HCO CITY": row.get('HCO_City', ''), "HCO STATE": row.get('HCO_State', ''), "HCO ZIP": row.get('HCO_ZIP', ''),
+                        })
 
         all_affiliations = {}
         if not db_affiliations_df.empty:
