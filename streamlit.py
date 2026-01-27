@@ -800,7 +800,7 @@ def render_enrichment_page(session, selected_hcp_df):
         api_response = get_enriched_data_from_llm(session, selected_hcp_df, search_query=user_search_query)
         
         proposed_hcp_data_df = pd.DataFrame(api_response['hcp_data'])
-        proposed_hcp_affiliation_data_df = pd.DataFrame(api_response['hcp_affiliation_data'])
+        proposed_hcp_affiliation_data_df = pd.DataFrame(api_response.get('hcp_affiliation_data', api_response.get('hco_affiliation_data', [])))
 
     try:
         if current_df.empty or proposed_hcp_data_df.empty:
