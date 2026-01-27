@@ -1143,12 +1143,10 @@ def render_main_page(session):
                 name_filter = match.group(1)
         
         if name_filter:
-            # Build a new query with guaranteed join
+            # Build a new query - no join needed for search results display
             new_sql = f"""
-            SELECT h.ID, h.NAME, h.ADDRESS1, h.ADDRESS2, h.CITY, h.STATE, h.ZIP, h.COUNTRY,
-                   o.OUTLET_ID, o.OUTLET_NAME, o.OUTLET_ADDRESS1, o.OUTLET_CITY, o.OUTLET_STATE, o.OUTLET_ZIP
+            SELECT h.ID, h.NAME, h.ADDRESS1, h.ADDRESS2, h.CITY, h.STATE, h.ZIP, h.COUNTRY
             FROM CORTEX_ANALYST_HCK.PUBLIC.HCO h
-            LEFT OUTER JOIN CORTEX_ANALYST_HCK.PUBLIC.OUTLET_HCO_AFFILIATION o ON h.ID = o.HCO_ID
             WHERE h.NAME ILIKE '{name_filter}'
             ORDER BY h.NAME
             """
