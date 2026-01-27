@@ -550,18 +550,19 @@ def render_main_page(session):
     elif option == "HCO Data Steward":
         st.session_state.app_variant = "HCO"
 
-    # Search Input (HCP/HCO) (based on app_variant)
-    freeze_container = st.container(border=True)
-    with freeze_container:
-        user_input_text = st.chat_input(f"Search for an {st.session_state.app_variant} Account")
-        current_prompt = user_input_text
+    if st.session_state.app_variant:
+        # Search Input (HCP/HCO) (based on app_variant)
+        freeze_container = st.container(border=True)
+        with freeze_container:
+            user_input_text = st.chat_input(f"Search for an {st.session_state.app_variant} Account")
+            current_prompt = user_input_text
 
-        if current_prompt and current_prompt != st.session_state.get("last_prompt"):
-            process_message(prompt=current_prompt)
-            st.session_state.last_prompt = current_prompt
+            if current_prompt and current_prompt != st.session_state.get("last_prompt"):
+                process_message(prompt=current_prompt)
+                st.session_state.last_prompt = current_prompt
 
-   # --- DISPLAY LOGIC (Vertical Flow) ---
-    if st.session_state.messages:
+    # --- DISPLAY LOGIC (Vertical Flow) ---
+        if st.session_state.messages:
         assistant_messages = [msg for msg in st.session_state.messages if msg["role"] == "assistant"]
         if assistant_messages:
             st.markdown("---")
@@ -690,7 +691,7 @@ def render_main_page(session):
 
 # Initialize session state variables
 if "app_variant" not in st.session_state:
-    st.session_state.app_variant = "HCP"
+    st.session_state.app_variant = None
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "results_df" not in st.session_state:
