@@ -34,7 +34,7 @@ def check_affiliation_exists(session, hcp_npi: str, hco_id: str) -> bool:
         return False
 
 
-def insert_affiliation_record(session, hcp_npi: str, hco_data: dict, generate_new_id: bool = False):
+def insert_affiliation_record(session, hcp_id:str, hcp_npi: str, hco_data: dict, generate_new_id: bool = False):
     """
     Insert a new affiliation record into HCP_HCO_AFFILIATION table.
     
@@ -70,8 +70,9 @@ def insert_affiliation_record(session, hcp_npi: str, hco_data: dict, generate_ne
             return str(val).replace("'", "''")
         
         insert_sql = f"""
-            INSERT INTO HCP_HCO_AFFILIATION (HCP_NPI, HCO_ID, HCO_NAME, HCO_ADDRESS1, HCO_CITY, HCO_STATE, HCO_ZIP)
+            INSERT INTO HCP_HCO_AFFILIATION (HCP_ACCT_ID, HCP_NPI, HCO_ID, HCO_NAME, HCO_ADDRESS1, HCO_CITY, HCO_STATE, HCO_ZIP)
             VALUES (
+                '{clean_val(hcp_id)}'
                 '{clean_val(hcp_npi)}',
                 {hco_id},
                 '{clean_val(hco_name)}',
@@ -749,7 +750,7 @@ def render_enrichment_page(session, selected_hcp_df):
                             # For AI-generated HCO (new or existing HCP), first insert the affiliation record
                             if is_ai_generated and new_hco_data:
                                 # Insert and get the new HCO_ID
-                                result = insert_affiliation_record(session, hcp_npi, new_hco_data, generate_new_id=True)
+                                result = insert_affiliation_record(session, selected_id, hcp_npi, new_hco_data, generate_new_id=True)
                                 if result is not None:
                                     final_hco_id = result  # Use the newly generated ID
                                     st.toast(f"✅ Affiliation record created with HCO ID: {final_hco_id}", icon="✅")
