@@ -836,8 +836,9 @@ def render_enrichment_page(session, selected_hco_df):
         for col_obj, header_name in zip(header_cols, hco_headers):
             col_obj.markdown(f"**{header_name}**")
         
-        primary_id_val = selected_record.get("PRIMARY_AFFL_HCO_ACCOUNT_ID")
-        true_primary_hco_id = int(primary_id_val) if pd.notna(primary_id_val) else None
+        # For HCO, the primary affiliation is stored in PRIMARY_AFFL_ACCOUNT_ID (OUTLET_ID)
+        primary_id_val = selected_record.get("PRIMARY_AFFL_ACCOUNT_ID")
+        true_primary_outlet_id = int(primary_id_val) if pd.notna(primary_id_val) else None
         
         hco_id = current_record.get("ID") or current_record.get("HCO_ID")
         db_affiliations_df = pd.DataFrame()
@@ -875,11 +876,13 @@ def render_enrichment_page(session, selected_hco_df):
         all_affiliations = {}
         if not db_affiliations_df.empty:
             for index, row in db_affiliations_df.iterrows():
-                hco_id = row.get('HCO_ID')
-                if not hco_id: continue
-                all_affiliations[hco_id] = {
+                outlet_id = row.get('OUTLET_ID')
+                if not outlet_id: continue
+                # Use OUTLET_ID as key for proper primary comparison
+                all_affiliations[outlet_id] = {
                     "SOURCE": "DB data",
-                    "HCO ID": hco_id, 
+                    "OUTLET_ID": outlet_id,
+                    "HCO ID": row.get('HCO_ID'), 
                     "HCO NAME": row.get('OUTLET_NAME'),
                     "HCO ADDRESS": f"{row.get('OUTLET_ADDRESS1', '')}, {row.get('OUTLET_ADDRESS2', '')}".strip(", "),
                     "HCO CITY": row.get('OUTLET_CITY'), 
@@ -957,13 +960,14 @@ def render_enrichment_page(session, selected_hco_df):
             
             sorted_affiliations = sorted(all_affiliations.items(), key=get_priority_for_sort)
             
-            for hco_id, hco_data in sorted_affiliations:
+            for outlet_id, hco_data in sorted_affiliations:
                 # Match header columns: 11 columns total
                 row_cols = st.columns([1.5, 1.5, 1.2, 2.5, 2, 1.2, 1.2, 1.2, 0.8, 1])
                 
+                # Check if this outlet is the primary affiliation
                 is_primary = False
                 try:
-                    is_primary = hco_id != "N/A" and true_primary_hco_id is not None and int(hco_id) == true_primary_hco_id
+                    is_primary = outlet_id != "N/A" and true_primary_outlet_id is not None and int(outlet_id) == true_primary_outlet_id
                 except (ValueError, TypeError):
                     pass
                 
@@ -976,9 +980,9 @@ def render_enrichment_page(session, selected_hco_df):
                     else:
                         # Different button text for new HCO
                         btn_text = "Add & Set Primary" if is_new_hco else "Set as Primary"
-                        if st.button(btn_text, key=f"set_primary_{hco_id}"):
+                        if st.button(btn_text, key=f"set_primary_{outlet_id}"):
                             st.session_state.show_primary_confirm_dialog = True
-                            st.session_state.primary_hco_id = hco_id
+                            st.session_state.primary_hco_id = outlet_id
                             # Store the full HCO data for insertion (needed for bypass flow and AI-generated)
                             st.session_state.primary_hco_data = hco_data
                             st.rerun()
@@ -990,7 +994,7 @@ def render_enrichment_page(session, selected_hco_df):
                 if is_ai_source:
                     row_cols[2].write("")
                 else:
-                    row_cols[2].write(str(hco_data.get("HCO ID", "")))
+                    row_cols[2].write(str(hco_data.get("OUTLET_ID", hco_data.get("HCO ID", ""))))
         
                 row_cols[3].write(hco_data.get("HCO NAME", ""))
                 row_cols[4].write(hco_data.get("HCO ADDRESS", ""))
@@ -999,13 +1003,13 @@ def render_enrichment_page(session, selected_hco_df):
                 row_cols[7].write(hco_data.get("HCO ZIP", ""))
                 
                 # Priority column - show "-" if not analyzed yet
-                priority_info = priority_rankings.get(str(hco_id), {"priority": "-", "reason": "N/A"})
+                priority_info = priority_rankings.get(str(outlet_id), {"priority": "-", "reason": "N/A"})
                 row_cols[8].write(str(priority_info.get("priority", "-")))
                 
                 # Reason button column - only show if priorities have been analyzed
                 with row_cols[9]:
                     if priority_rankings:
-                        reason_key = f"reason_{hco_id}"
+                        reason_key = f"reason_{outlet_id}"
                         if st.button("ℹ️", key=reason_key, help="Click to see why this priority was assigned"):
                             st.session_state.show_reason_popup = True
                             st.session_state.reason_popup_data = {
