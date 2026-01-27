@@ -799,13 +799,18 @@ def render_enrichment_page(session, selected_hcp_df):
         user_search_query = st.session_state.get('web_search_query', None)
         api_response = get_enriched_data_from_llm(session, selected_hcp_df, search_query=user_search_query)
         
-        # Debug: Show api_response keys
-        st.write("DEBUG - api_response type:", type(api_response))
-        st.write("DEBUG - api_response keys:", api_response.keys() if isinstance(api_response, dict) else "Not a dict")
-        st.write("DEBUG - api_response:", api_response)
+        # Safely extract data with fallbacks
+        if not isinstance(api_response, dict):
+            st.error("API response is not a dictionary. Cannot proceed.")
+            st.stop()
         
-        proposed_hcp_data_df = pd.DataFrame(api_response['hcp_data'])
-        proposed_hcp_affiliation_data_df = pd.DataFrame(api_response.get('hcp_affiliation_data', api_response.get('hco_affiliation_data', [])))
+        # Try different key names for HCP data
+        hcp_data = api_response.get('hcp_data', api_response.get('hco_data', []))
+        proposed_hcp_data_df = pd.DataFrame(hcp_data)
+        
+        # Try different key names for affiliation data
+        affiliation_data = api_response.get('hcp_affiliation_data', api_response.get('hco_affiliation_data', []))
+        proposed_hcp_affiliation_data_df = pd.DataFrame(affiliation_data)
 
     try:
         if current_df.empty or proposed_hcp_data_df.empty:
